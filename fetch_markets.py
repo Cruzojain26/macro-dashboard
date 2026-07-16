@@ -126,6 +126,49 @@ def stats_block(s: pd.Series) -> dict:
     return out
 
 
+# NSE index name (allIndices API) -> our yfinance ticker. Yahoo's ^CNX* feed
+# regularly lags NSE by up to a week; when reachable (Indian IPs — GitHub's
+# cloud runners are blocked by NSE), the official NSE quote tops up the series.
+NSE_INDEX_MAP = {
+    "NIFTY 50": "^NSEI", "NIFTY BANK": "^NSEBANK", "NIFTY IT": "^CNXIT",
+    "NIFTY PHARMA": "^CNXPHARMA", "NIFTY FMCG": "^CNXFMCG",
+    "NIFTY AUTO": "^CNXAUTO", "NIFTY METAL": "^CNXMETAL",
+    "NIFTY ENERGY": "^CNXENERGY", "NIFTY REALTY": "^CNXREALTY",
+    "NIFTY INFRASTRUCTURE": "^CNXINFRA", "NIFTY PSE": "^CNXPSE",
+    "NIFTY PSU BANK": "^CNXPSUBANK", "NIFTY MEDIA": "^CNXMEDIA",
+}
+
+
+def nse_topup(series_by_ticker: dict) -> list:
+    """Append the latest official NSE close where Yahoo's series lags. Best-effort."""
+    import requests
+    topped = []
+    try:
+        sess = requests.Session()
+        sess.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                             "Accept-Language": "en-US,en;q=0.9"})
+        sess.get("https://www.nseindia.com", timeout=15)          # seed Akamai cookies
+        resp = sess.get("https://www.nseindia.com/api/allIndices", timeout=15)
+        resp.raise_for_status()
+        payload = resp.json()
+        ts = pd.to_datetime(payload["timestamp"], format="%d-%b-%Y %H:%M")
+        bar_date = ts.normalize()
+        for row in payload.get("data", []):
+            tkr = NSE_INDEX_MAP.get(row.get("index", "").upper())
+            if not tkr or tkr not in series_by_ticker:
+                continue
+            close = row.get("last") or row.get("previousClose")
+            if not close:
+                continue
+            s = series_by_ticker[tkr]
+            if bar_date > s.index[-1]:
+                s.loc[bar_date] = float(close)
+                topped.append(tkr)
+    except Exception as e:
+        print(f"  NSE top-up skipped ({type(e).__name__}: {e})")
+    return topped
+
+
 def main():
     tickers = list(TICKERS.keys())
     print(f"Downloading {len(tickers)} tickers (5y daily)...")
@@ -135,7 +178,8 @@ def main():
     out = {"generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
            "instruments": {}}
     failed = []
-    for tkr, (label, group) in TICKERS.items():
+    series_by_ticker = {}
+    for tkr in TICKERS:
         if tkr not in raw.columns:
             failed.append(tkr)
             continue
@@ -143,6 +187,14 @@ def main():
         if len(s) < 30:
             failed.append(tkr)
             continue
+        series_by_ticker[tkr] = s
+
+    topped = nse_topup(series_by_ticker)
+    if topped:
+        print(f"  NSE top-up applied to {len(topped)}: {topped}")
+
+    for tkr, s in series_by_ticker.items():
+        label, group = TICKERS[tkr]
         out["instruments"][tkr] = {
             "label": label,
             "group": group,

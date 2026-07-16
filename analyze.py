@@ -53,6 +53,71 @@ def chg(s, n):
     return round(float(s.iloc[-1] - s.iloc[-1 - n]), 3)
 
 
+# Expected maximum age (calendar days) of the latest observation, per series,
+# based on each source's official publication schedule. age <= expected -> CURRENT;
+# expected < age <= 2x -> LATE (publication overdue); beyond 2x -> STALE.
+EXPECTED_AGE = {
+    # daily, published next business day (weekend/holiday grace included)
+    "DFF": 5, "RRPONTSYD": 5, "DGS3MO": 5, "DGS2": 5, "DGS5": 5, "DGS10": 5,
+    "DGS30": 5, "T10Y2Y": 5, "T10Y3M": 5, "DFII10": 5, "T10YIE": 5, "T5YIFR": 5,
+    "BAMLH0A0HYM2": 6, "BAMLC0A0CM": 6,
+    # weekly releases (max normal age = 7d span + publication lag + grace)
+    "WALCL": 10, "WTREGEN": 10, "ICSA": 14, "NFCI": 12, "STLFSI4": 12,
+    "WEI": 12, "ECBASSETSW": 14,
+    # monthly: obs is labeled with the month START, so the newest label reaches
+    # age ~62d + publication lag just before the next release. expected =
+    # 62 + typical lag + grace — beyond that the release is genuinely overdue.
+    "CPIAUCSL": 80, "CPILFESL": 80, "PPIACO": 82, "PAYEMS": 72, "UNRATE": 72,
+    "SAHMREALTIME": 77, "INDPRO": 85, "RSAFS": 85, "UMCSENT": 100, "HOUST": 87,
+    "PERMIT": 87, "M2SL": 95, "PCEPILFE": 98, "JPNASSETS": 100, "USREC": 100,
+    # OECD monthly (official lag runs 1-2 months)
+    "IRLTLT01DEM156N": 130, "IRLTLT01JPM156N": 130, "IRLTLT01GBM156N": 130,
+    "INDIRLTLT01STM": 130, "INDCPIALLMINMEI": 130,
+    # quarterly GDP: newest label is ~215d old just before the next advance print
+    "GDPC1": 220,
+}
+
+
+def build_freshness(fred, mkt):
+    today = dt.datetime.now(dt.timezone.utc).date()
+    rows = []
+    for sid, s in fred["series"].items():
+        last_obs = dt.date.fromisoformat(s["dates"][-1])
+        age = (today - last_obs).days
+        exp = EXPECTED_AGE.get(sid, 60)
+        status = "current" if age <= exp else "late" if age <= 2 * exp else "stale"
+        rows.append({"id": sid, "label": s["label"], "source": "FRED",
+                     "last_obs": s["dates"][-1], "age_days": age,
+                     "expected_days": exp, "status": status,
+                     "late_by_days": max(0, age - exp)})
+    # market instruments: bar data should be no older than 5 calendar days
+    for tkr, m in mkt["instruments"].items():
+        last_obs = dt.date.fromisoformat(m["dates"][-1])
+        age = (today - last_obs).days
+        status = "current" if age <= 5 else "late" if age <= 10 else "stale"
+        if status != "current":   # only list problem instruments, not all 72
+            rows.append({"id": tkr, "label": m["label"], "source": "Yahoo",
+                         "last_obs": m["dates"][-1], "age_days": age,
+                         "expected_days": 5, "status": status,
+                         "late_by_days": age - 5})
+    rows.sort(key=lambda r: (-{"stale": 2, "late": 1, "current": 0}[r["status"]],
+                             -r["late_by_days"]))
+    n_mkt_ok = sum(1 for m in mkt["instruments"].values()
+                   if (today - dt.date.fromisoformat(m["dates"][-1])).days <= 5)
+    summary = {
+        "current": sum(1 for r in rows if r["status"] == "current") + n_mkt_ok,
+        "late": sum(1 for r in rows if r["status"] == "late"),
+        "stale": sum(1 for r in rows if r["status"] == "stale"),
+        "market_instruments_current": n_mkt_ok,
+        "market_instruments_total": len(mkt["instruments"]),
+        "markets_fetched_at": mkt["generated_at"],
+        "quote_delay_note": ("Yahoo end-of-day/intraday quotes are delayed up to "
+                             "~15-20 min depending on exchange; FRED series update "
+                             "on official release schedules."),
+    }
+    return {"summary": summary, "rows": rows}
+
+
 def main():
     fred = json.loads((DATA / "fred.json").read_text(encoding="utf-8"))
     mkt = json.loads((DATA / "markets.json").read_text(encoding="utf-8"))
@@ -320,6 +385,16 @@ def main():
         {"asset": "USD", "tilt": "Neutral",
          "why": f"DXY 3m {mkt['instruments']['DX-Y.NYB']['stats']['chg3m']:+.1f}%"},
     ]
+    # data freshness audit — surfaced on the dashboard, stale data is disclosed
+    out["freshness"] = build_freshness(fred, mkt)
+    fs = out["freshness"]["summary"]
+    if fs["stale"] or fs["late"]:
+        worst = [r for r in out["freshness"]["rows"] if r["status"] != "current"][:4]
+        concl.insert(0, ("watch",
+            f"DATA QUALITY: {fs['stale']} stale, {fs['late']} late series",
+            "; ".join(f"{r['label']} last {r['last_obs']} ({r['late_by_days']}d overdue)"
+                      for r in worst) + ". See the data-freshness panel before relying on affected reads."))
+
     out["conclusions"] = [{"sev": s, "title": t, "detail": d} for s, t, d in concl]
 
     (DATA / "analysis.json").write_text(json.dumps(out, separators=(",", ":")),

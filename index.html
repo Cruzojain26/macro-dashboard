@@ -64,6 +64,10 @@ td.up{color:var(--up)} td.down{color:var(--down)}
 .chip{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--border)}
 .chip.Leading{color:var(--up)} .chip.Improving{color:var(--s1)}
 .chip.Weakening{color:var(--s3)} .chip.Lagging{color:var(--down)}
+.chip.current{color:var(--up)} .chip.late{color:var(--s3)} .chip.stale{color:var(--down)}
+.fresh-strip{font-size:12.5px;color:var(--ink2);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 14px;margin:10px 0;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.fresh-strip a{color:var(--ink2)}
+.fresh-strip b.ok{color:var(--up)} .fresh-strip b.warn{color:var(--s3)} .fresh-strip b.bad{color:var(--down)}
 .concl{display:grid;gap:8px;margin-top:10px}
 .concl .c-item{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--s1);border-radius:10px;padding:10px 14px}
 .concl .c-item.watch{border-left-color:var(--s3)}
@@ -321,6 +325,18 @@ async function main(){
     'markets as of '+new Date(mkt.generated_at).toLocaleString()+' · macro series as published by source';
   const root=document.getElementById('content'); root.innerHTML='';
 
+  // ---- data-freshness strip (full audit panel at the bottom) ----
+  const fr=an.freshness;
+  if(fr){
+    const fs=fr.summary, ageH=Math.round((Date.now()-new Date(fs.markets_fetched_at))/36e5*10)/10;
+    const strip=document.createElement('div'); strip.className='fresh-strip';
+    strip.innerHTML=`<span><b class="ok">${fs.current} current</b> · <b class="${fs.late?'warn':'ok'}">${fs.late} late</b> · <b class="${fs.stale?'bad':'ok'}">${fs.stale} stale</b></span>
+      <span>markets snapshot ${ageH}h old (pipeline refreshes every 6h)</span>
+      <span>quotes delayed ≤ ~20 min at source</span>
+      <a href="#freshness">full audit ↓</a>`;
+    root.appendChild(strip);
+  }
+
   // recession bands from USREC
   const rec=F('USREC'), bands=[];
   if(rec){ let a=null;
@@ -460,11 +476,33 @@ async function main(){
   mkRRG('US sector rotation','SPDR sectors vs S&P 500',an.rrg.us_sectors,'S&P 500');
   mkRRG('India sector rotation','NSE sector indices vs Nifty 50',an.rrg.in_sectors,'Nifty 50');
   mkRRG('Global themes & industries','theme ETFs vs S&P 500 — semis, defense, uranium, data centers, copper…',an.rrg.themes,'S&P 500');
+
+  // ---- data-freshness audit ----
+  if(fr){
+    const h=document.createElement('h2'); h.id='freshness';
+    h.innerHTML='Data freshness audit <span class="note">every series vs its official publication schedule — late/stale reads are disclosed, not hidden</span>';
+    root.appendChild(h);
+    const g=document.createElement('div'); g.style.marginTop='10px'; root.appendChild(g);
+    const card=document.createElement('div'); card.className='card'; g.appendChild(card);
+    const fs=fr.summary;
+    let html=`<div class="sub">Markets snapshot: ${new Date(fs.markets_fetched_at).toLocaleString()} · ${fs.market_instruments_current}/${fs.market_instruments_total} instruments have a bar ≤ 5 days old · ${fs.quote_delay_note}</div>
+    <div style="max-height:420px;overflow:auto;margin-top:6px"><table>
+    <tr><th>Series</th><th>Source</th><th style="text-align:left">Status</th><th>Last observation</th><th>Age</th><th>Expected ≤</th><th>Overdue by</th></tr>`;
+    for(const r of fr.rows){
+      html+=`<tr><td>${r.label}</td><td>${r.source}</td>
+        <td style="text-align:left"><span class="chip ${r.status}">${r.status.toUpperCase()}</span></td>
+        <td>${r.last_obs}</td><td>${r.age_days}d</td><td>${r.expected_days}d</td>
+        <td>${r.late_by_days>0?`<span style="color:var(--down);font-weight:600">${r.late_by_days}d</span>`:'—'}</td></tr>`;
+    }
+    card.innerHTML=html+'</table></div>';
+  }
 }
 main().catch(e=>{
   document.getElementById('content').innerHTML=
     `<div class="err">Failed to load data: ${e.message}. If opening locally, serve over HTTP (python -m http.server) — browsers block fetch() from file://.</div>`;
 });
+// keep an open tab live: re-fetch and re-render every 10 minutes (silent on failure — keeps last good render)
+setInterval(()=>{ main().catch(()=>{}); }, 10*60*1000);
 </script>
 </body>
 </html>
