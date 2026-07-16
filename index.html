@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Global Macro Monitor</title>
+<style>
+:root{
+  --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#1baf7a; --s3:#eda100; --s4:#4a3aa7; --s5:#e34948;
+  --up:#006300; --down:#d03b3b;
+  --wash-lead:rgba(0,131,0,.07); --wash-improve:rgba(42,120,214,.07);
+  --wash-weak:rgba(237,161,0,.09); --wash-lag:rgba(227,73,72,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --surface:#1a1a19; --page:#0d0d0d; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s4:#9085e9; --s5:#e66767;
+    --up:#0ca30c; --down:#e66767;
+    --wash-lead:rgba(12,163,12,.10); --wash-improve:rgba(57,135,229,.10);
+    --wash-weak:rgba(201,133,0,.12); --wash-lag:rgba(230,103,103,.10);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--page);color:var(--ink);line-height:1.45;padding:20px 16px 60px}
+.wrap{max-width:1240px;margin:0 auto}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:6px}
+header.top h1{font-size:22px;font-weight:650}
+.asof{color:var(--muted);font-size:12.5px}
+.regime-hero{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin:14px 0;display:flex;flex-wrap:wrap;gap:26px;align-items:center}
+.regime-hero .big{font-size:34px;font-weight:650;line-height:1.1}
+.regime-hero .sub{color:var(--ink2);font-size:13.5px;max-width:520px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.tile .lbl{font-size:12px;color:var(--ink2)}
+.tile .val{font-size:24px;font-weight:600;margin-top:2px}
+.tile .dlt{font-size:12px;margin-top:2px;color:var(--muted)}
+.dlt.up{color:var(--up)} .dlt.down{color:var(--down)}
+h2{font-size:16px;font-weight:650;margin:30px 0 4px;padding-top:14px;border-top:1px solid var(--grid)}
+h2 .note{font-weight:400;color:var(--muted);font-size:12.5px;margin-left:8px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;margin-top:10px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:10px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:relative}
+.card h3{font-size:13.5px;font-weight:600}
+.card .sub{font-size:12px;color:var(--muted);margin-bottom:4px}
+.card .tbtn{position:absolute;top:12px;right:12px;font-size:11px;color:var(--muted);background:none;border:1px solid var(--grid);border-radius:6px;padding:2px 8px;cursor:pointer}
+.card .tbtn:hover{color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--ink2);margin:4px 0 2px}
+.legend .key{display:inline-flex;align-items:center;gap:5px}
+.legend .sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+svg{display:block;width:100%}
+.tooltip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.14);padding:7px 10px;font-size:12px;display:none;z-index:10;min-width:120px}
+.tooltip .tt-date{color:var(--muted);margin-bottom:3px}
+.tooltip .tt-row{display:flex;justify-content:space-between;gap:14px}
+.tooltip .tt-row b{font-variant-numeric:tabular-nums;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--muted);font-weight:500;text-align:right;padding:5px 8px;border-bottom:1px solid var(--grid);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td.up{color:var(--up)} td.down{color:var(--down)}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--border)}
+.chip.Leading{color:var(--up)} .chip.Improving{color:var(--s1)}
+.chip.Weakening{color:var(--s3)} .chip.Lagging{color:var(--down)}
+.concl{display:grid;gap:8px;margin-top:10px}
+.concl .c-item{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--s1);border-radius:10px;padding:10px 14px}
+.concl .c-item.watch{border-left-color:var(--s3)}
+.concl .c-item.action{border-left-color:var(--up)}
+.concl .c-title{font-weight:600;font-size:13.5px}
+.concl .c-detail{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.dtable{max-height:260px;overflow:auto;margin-top:8px;display:none}
+footer{margin-top:40px;color:var(--muted);font-size:12px;border-top:1px solid var(--grid);padding-top:14px}
+footer a{color:var(--ink2)}
+.err{background:var(--surface);border:1px solid var(--down);border-radius:10px;padding:14px;margin:20px 0;color:var(--down)}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header class="top">
+    <h1>Global Macro Monitor</h1>
+    <span class="asof" id="asof">loading…</span>
+  </header>
+  <div id="content">Loading data…</div>
+  <footer>
+    Sources: Federal Reserve / FRED (St. Louis Fed), NY Fed (WEI), BLS, BEA, Census, ICE BofA (credit spreads via FRED),
+    Chicago Fed (NFCI), OECD (global &amp; India yields via FRED), NSE &amp; global exchange data via Yahoo Finance.
+    Auto-updates every 6 hours via GitHub Actions. Analysis is rule-based and generated from the data shown —
+    verify before committing capital; nothing here is investment advice.
+  </footer>
+</div>
+<script>
+"use strict";
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SC = () => [css('--s1'),css('--s2'),css('--s3'),css('--s4'),css('--s5')];
+const fmtN = (v,d=2) => v==null?'–':Number(v).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:0});
+const pctCell = v => v==null?'<td>–</td>':`<td class="${v>0?'up':v<0?'down':''}">${v>0?'▲':v<0?'▼':''} ${Math.abs(v).toFixed(1)}%</td>`;
+const parseD = s => new Date(s+'T00:00:00Z').getTime();
+
+// ---- series helpers ----
+function S(obj){ return {dates:obj.dates.map(parseD), values:obj.values}; }
+function yoy(s, n=12){
+  const d=[],v=[];
+  for(let i=n;i<s.values.length;i++){ d.push(s.dates[i]); v.push((s.values[i]/s.values[i-n]-1)*100); }
+  return {dates:d, values:v};
+}
+function ann3m(s){
+  const d=[],v=[];
+  for(let i=3;i<s.values.length;i++){ d.push(s.dates[i]); v.push((Math.pow(s.values[i]/s.values[i-3],4)-1)*100); }
+  return {dates:d, values:v};
+}
+function roll(s,n){
+  const d=[],v=[];
+  for(let i=n-1;i<s.values.length;i++){
+    let sum=0; for(let j=i-n+1;j<=i;j++) sum+=s.values[j];
+    d.push(s.dates[i]); v.push(sum/n);
+  }
+  return {dates:d,values:v};
+}
+function since(s, iso){ const t=parseD(iso); const d=[],v=[];
+  for(let i=0;i<s.dates.length;i++) if(s.dates[i]>=t){d.push(s.dates[i]);v.push(s.values[i]);}
+  return {dates:d,values:v}; }
+function scale(s,k){ return {dates:s.dates, values:s.values.map(x=>x*k)}; }
+
+// ---- tick helpers ----
+function niceTicks(lo,hi,n=5){
+  if(lo===hi){lo-=1;hi+=1;}
+  const span=hi-lo, step0=span/n, mag=Math.pow(10,Math.floor(Math.log10(step0)));
+  const step=[1,2,2.5,5,10].map(m=>m*mag).find(st=>span/st<=n+1)||10*mag;
+  const t=[]; for(let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) t.push(+v.toFixed(10));
+  return t;
+}
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(t){ const d=new Date(t); return MONTHS[d.getUTCMonth()]+" '"+String(d.getUTCFullYear()).slice(2); }
+function fmtDateFull(t){ const d=new Date(t); return d.getUTCDate()+' '+MONTHS[d.getUTCMonth()]+' '+d.getUTCFullYear(); }
+
+// ---- line chart ----
+function lineChart(el, cfg){
+  // cfg: {title, sub, series:[{label, data:{dates,values}}], yfmt, zero, hline, bands, height}
+  const H = cfg.height||210, PL=46, PR=14, PT=10, PB=24;
+  const card=document.createElement('div'); card.className='card'; el.appendChild(card);
+  card.innerHTML = `<h3>${cfg.title}</h3>` + (cfg.sub?`<div class="sub">${cfg.sub}</div>`:'') +
+    `<button class="tbtn">table</button>`;
+  if(cfg.series.length>1){
+    const lg=document.createElement('div'); lg.className='legend';
+    lg.innerHTML=cfg.series.map((s,i)=>`<span class="key"><span class="sw" style="background:${SC()[i]}"></span>${s.label}</span>`).join('');
+    card.appendChild(lg);
+  }
+  const holder=document.createElement('div'); holder.style.position='relative'; card.appendChild(holder);
+  const W = Math.max(320, card.clientWidth-32) || 520;
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.height=H+'px'; holder.appendChild(svg);
+  const tip=document.createElement('div'); tip.className='tooltip'; holder.appendChild(tip);
+
+  const allT=cfg.series.flatMap(s=>s.data.dates), allV=cfg.series.flatMap(s=>s.data.values).filter(v=>v!=null&&isFinite(v));
+  let t0=Math.min(...allT), t1=Math.max(...allT);
+  let v0=Math.min(...allV), v1=Math.max(...allV);
+  if(cfg.zero!==undefined){ v0=Math.min(v0,cfg.zero); v1=Math.max(v1,cfg.zero); }
+  if(cfg.hline!=null){ v0=Math.min(v0,cfg.hline); v1=Math.max(v1,cfg.hline); }
+  const pad=(v1-v0)*0.06||1; v0-=pad; v1+=pad;
+  const X=t=>PL+(t-t0)/(t1-t0)*(W-PL-PR), Y=v=>PT+(v1-v)/(v1-v0)*(H-PT-PB);
+  const yf=cfg.yfmt||(v=>fmtN(v,2));
+  let g='';
+  // recession bands
+  if(cfg.bands) for(const [a,b] of cfg.bands){
+    if(b<t0||a>t1) continue;
+    const xa=X(Math.max(a,t0)), xb=X(Math.min(b,t1));
+    g+=`<rect x="${xa}" y="${PT}" width="${Math.max(xb-xa,1)}" height="${H-PT-PB}" fill="var(--grid)" opacity="0.55"/>`;
+  }
+  for(const tv of niceTicks(v0,v1,4)){
+    g+=`<line x1="${PL}" x2="${W-PR}" y1="${Y(tv)}" y2="${Y(tv)}" stroke="var(--grid)" stroke-width="1"/>`+
+       `<text x="${PL-6}" y="${Y(tv)+4}" text-anchor="end" font-size="10.5" fill="var(--muted)" style="font-variant-numeric:tabular-nums">${yf(tv)}</text>`;
+  }
+  const nx=Math.min(6,Math.floor(W/110));
+  for(let i=0;i<=nx;i++){
+    const t=t0+(t1-t0)*i/nx;
+    g+=`<text x="${X(t)}" y="${H-7}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${fmtDate(t)}</text>`;
+  }
+  if(cfg.zero!==undefined && cfg.zero>=v0 && cfg.zero<=v1)
+    g+=`<line x1="${PL}" x2="${W-PR}" y1="${Y(cfg.zero)}" y2="${Y(cfg.zero)}" stroke="var(--axis)" stroke-width="1"/>`;
+  if(cfg.hline!=null)
+    g+=`<line x1="${PL}" x2="${W-PR}" y1="${Y(cfg.hline)}" y2="${Y(cfg.hline)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="none" opacity="0.8"/>`+
+       `<text x="${W-PR}" y="${Y(cfg.hline)-4}" text-anchor="end" font-size="10" fill="var(--muted)">${cfg.hlineLabel||''}</text>`;
+  cfg.series.forEach((s,i)=>{
+    const c=SC()[i]; let path='';
+    s.data.dates.forEach((t,j)=>{ const v=s.data.values[j]; if(v==null||!isFinite(v))return;
+      path+=(path?'L':'M')+X(t).toFixed(1)+' '+Y(v).toFixed(1); });
+    g+=`<path d="${path}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const lt=s.data.dates[s.data.dates.length-1], lv=s.data.values[s.data.values.length-1];
+    g+=`<circle cx="${X(lt)}" cy="${Y(lv)}" r="4" fill="${c}" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+  // single-series end label
+  if(cfg.series.length===1){
+    const s=cfg.series[0], lv=s.data.values[s.data.values.length-1];
+    g+=`<text x="${W-PR}" y="${Math.max(PT+10,Y(lv)-8)}" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink)" style="font-variant-numeric:tabular-nums">${yf(lv)}</text>`;
+  }
+  const cross=`<line id="cx" x1="0" x2="0" y1="${PT}" y2="${H-PB}" stroke="var(--axis)" stroke-width="1" visibility="hidden"/>`;
+  svg.innerHTML=g+cross;
+  const cx=svg.querySelector('#cx');
+  holder.addEventListener('mousemove',e=>{
+    const r=svg.getBoundingClientRect(), mx=(e.clientX-r.left)*(W/r.width);
+    if(mx<PL||mx>W-PR){tip.style.display='none';cx.setAttribute('visibility','hidden');return;}
+    const t=t0+(mx-PL)/(W-PL-PR)*(t1-t0);
+    let rows='', dateTxt='';
+    cfg.series.forEach((s,i)=>{
+      let lo=0,hi=s.data.dates.length-1;
+      while(hi-lo>1){const m=(lo+hi)>>1; s.data.dates[m]<t?lo=m:hi=m;}
+      const j=(t-s.data.dates[lo]<s.data.dates[hi]-t)?lo:hi;
+      dateTxt=fmtDateFull(s.data.dates[j]);
+      rows+=`<div class="tt-row"><span><span class="sw" style="background:${SC()[i]};display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:4px"></span>${s.label}</span><b>${yf(s.data.values[j])}</b></div>`;
+    });
+    tip.innerHTML=`<div class="tt-date">${dateTxt}</div>`+rows;
+    tip.style.display='block';
+    const px=e.clientX-r.left; tip.style.left=(px>r.width-160?px-150:px+14)+'px'; tip.style.top='8px';
+    cx.setAttribute('x1',mx);cx.setAttribute('x2',mx);cx.setAttribute('visibility','visible');
+  });
+  holder.addEventListener('mouseleave',()=>{tip.style.display='none';cx.setAttribute('visibility','hidden');});
+  // table view
+  const dt=document.createElement('div'); dt.className='dtable'; card.appendChild(dt);
+  card.querySelector('.tbtn').addEventListener('click',()=>{
+    if(dt.style.display==='block'){dt.style.display='none';return;}
+    if(!dt.innerHTML){
+      const ref=cfg.series[0].data, n=Math.min(36,ref.dates.length);
+      let h='<table><tr><th>Date</th>'+cfg.series.map(s=>`<th>${s.label}</th>`).join('')+'</tr>';
+      for(let k=0;k<n;k++){
+        const idx=ref.dates.length-1-k, t=ref.dates[idx];
+        h+=`<tr><td>${fmtDateFull(t)}</td>`+cfg.series.map(s=>{
+          let lo=0,hi=s.data.dates.length-1;
+          while(hi-lo>1){const m=(lo+hi)>>1; s.data.dates[m]<t?lo=m:hi=m;}
+          const j=(t-s.data.dates[lo]<s.data.dates[hi]-t)?lo:hi;
+          return `<td>${yf(s.data.values[j])}</td>`;}).join('')+'</tr>';
+      }
+      dt.innerHTML=h+'</table>';
+    }
+    dt.style.display='block';
+  });
+}
+
+// ---- RRG scatter ----
+function rrgScatter(el, rows, title, sub){
+  const card=document.createElement('div'); card.className='card'; el.appendChild(card);
+  card.innerHTML=`<h3>${title}</h3><div class="sub">${sub}</div>`;
+  const holder=document.createElement('div'); holder.style.position='relative'; card.appendChild(holder);
+  const W=Math.max(320,card.clientWidth-32)||480, H=330, PL=40,PR=14,PT=12,PB=30;
+  const xs=rows.map(r=>r.rs_ratio), ys=rows.map(r=>r.rs_mom);
+  const padx=Math.max(1.2,(Math.max(...xs)-Math.min(...xs))*0.18), pady=Math.max(0.8,(Math.max(...ys)-Math.min(...ys))*0.18);
+  const x0=Math.min(100-0.5,Math.min(...xs)-padx), x1=Math.max(100+0.5,Math.max(...xs)+padx);
+  const y0=Math.min(100-0.5,Math.min(...ys)-pady), y1=Math.max(100+0.5,Math.max(...ys)+pady);
+  const X=v=>PL+(v-x0)/(x1-x0)*(W-PL-PR), Y=v=>PT+(y1-v)/(y1-y0)*(H-PT-PB);
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.height=H+'px'; holder.appendChild(svg);
+  const tip=document.createElement('div'); tip.className='tooltip'; holder.appendChild(tip);
+  let g='';
+  g+=`<rect x="${X(100)}" y="${PT}" width="${W-PR-X(100)}" height="${Y(100)-PT}" fill="var(--wash-lead)"/>`;
+  g+=`<rect x="${PL}" y="${PT}" width="${X(100)-PL}" height="${Y(100)-PT}" fill="var(--wash-improve)"/>`;
+  g+=`<rect x="${X(100)}" y="${Y(100)}" width="${W-PR-X(100)}" height="${H-PB-Y(100)}" fill="var(--wash-weak)"/>`;
+  g+=`<rect x="${PL}" y="${Y(100)}" width="${X(100)-PL}" height="${H-PB-Y(100)}" fill="var(--wash-lag)"/>`;
+  g+=`<line x1="${X(100)}" x2="${X(100)}" y1="${PT}" y2="${H-PB}" stroke="var(--axis)" stroke-width="1"/>`;
+  g+=`<line x1="${PL}" x2="${W-PR}" y1="${Y(100)}" y2="${Y(100)}" stroke="var(--axis)" stroke-width="1"/>`;
+  g+=`<text x="${W-PR-4}" y="${PT+14}" text-anchor="end" font-size="10.5" fill="var(--muted)">LEADING</text>`;
+  g+=`<text x="${PL+4}" y="${PT+14}" font-size="10.5" fill="var(--muted)">IMPROVING</text>`;
+  g+=`<text x="${W-PR-4}" y="${H-PB-6}" text-anchor="end" font-size="10.5" fill="var(--muted)">WEAKENING</text>`;
+  g+=`<text x="${PL+4}" y="${H-PB-6}" font-size="10.5" fill="var(--muted)">LAGGING</text>`;
+  g+=`<text x="${(PL+W-PR)/2}" y="${H-6}" text-anchor="middle" font-size="10.5" fill="var(--muted)">RS-Ratio (trend vs benchmark) →</text>`;
+  g+=`<text x="12" y="${(PT+H-PB)/2}" font-size="10.5" fill="var(--muted)" transform="rotate(-90 12 ${(PT+H-PB)/2})" text-anchor="middle">RS-Momentum →</text>`;
+  const phaseColor={Leading:'var(--up)',Improving:'var(--s1)',Weakening:'var(--s3)',Lagging:'var(--down)'};
+  rows.forEach((r,i)=>{
+    g+=`<circle data-i="${i}" cx="${X(r.rs_ratio)}" cy="${Y(r.rs_mom)}" r="6" fill="${phaseColor[r.phase]}" stroke="var(--surface)" stroke-width="2" style="cursor:pointer"/>`;
+    g+=`<text x="${X(r.rs_ratio)+9}" y="${Y(r.rs_mom)+4}" font-size="10.5" fill="var(--ink2)">${r.label.replace('Nifty ','')}</text>`;
+  });
+  svg.innerHTML=g;
+  svg.addEventListener('mousemove',e=>{
+    const c=e.target.closest('circle[data-i]');
+    if(!c){tip.style.display='none';return;}
+    const r=rows[+c.dataset.i], rect=svg.getBoundingClientRect();
+    tip.innerHTML=`<div class="tt-date">${r.label} — ${r.phase}</div>
+      <div class="tt-row"><span>RS-Ratio</span><b>${r.rs_ratio}</b></div>
+      <div class="tt-row"><span>RS-Mom</span><b>${r.rs_mom}</b></div>
+      <div class="tt-row"><span>Rel 3m</span><b>${r.rel3m==null?'–':r.rel3m+'%'}</b></div>`;
+    tip.style.display='block';
+    tip.style.left=Math.min(e.clientX-rect.left+14, rect.width-160)+'px';
+    tip.style.top=(e.clientY-rect.top-10)+'px';
+  });
+  svg.addEventListener('mouseleave',()=>tip.style.display='none');
+}
+
+function rrgTable(el, rows, bench){
+  const card=document.createElement('div'); card.className='card'; el.appendChild(card);
+  let h=`<h3>Relative performance vs ${bench}</h3><div class="sub">sorted by 3-month relative return</div>
+  <div style="overflow-x:auto"><table><tr><th>Name</th><th>Phase</th><th>Rel 1m</th><th>Rel 3m</th><th>Rel 6m</th><th>Abs 3m</th></tr>`;
+  for(const r of rows){
+    h+=`<tr><td>${r.label}</td><td style="text-align:left"><span class="chip ${r.phase}">${r.phase}</span></td>`+
+      pctCell(r.rel1m)+pctCell(r.rel3m)+pctCell(r.rel6m)+pctCell(r.abs3m)+'</tr>';
+  }
+  card.innerHTML=h+'</table></div>';
+}
+
+function marketTable(el, title, instruments, keys){
+  const card=document.createElement('div'); card.className='card'; el.appendChild(card);
+  let h=`<h3>${title}</h3><div style="overflow-x:auto"><table>
+  <tr><th>Instrument</th><th>Last</th><th>1d</th><th>1m</th><th>3m</th><th>YTD</th><th>1y</th><th>vs 200dma</th><th>vs 52w-hi</th></tr>`;
+  for(const k of keys){
+    const m=instruments[k]; if(!m) continue; const s=m.stats;
+    h+=`<tr><td>${m.label}</td><td>${fmtN(s.last, s.last>1000?0:2)}</td>`+
+      pctCell(s.chg1d)+pctCell(s.chg1m)+pctCell(s.chg3m)+pctCell(s.chgytd)+pctCell(s.chg1y)+pctCell(s.vs200dma)+pctCell(s.from52wHigh)+'</tr>';
+  }
+  card.innerHTML=h+'</table></div>';
+}
+
+// ---- main ----
+async function main(){
+  const bust='?v='+Date.now();
+  const [fred,mkt,an]=await Promise.all(
+    ['data/fred.json','data/markets.json','data/analysis.json'].map(u=>fetch(u+bust).then(r=>{
+      if(!r.ok) throw new Error(u+' → HTTP '+r.status); return r.json();})));
+  const F=k=>fred.series[k]?S(fred.series[k]):null;
+  const P=k=>mkt.instruments[k]?S(mkt.instruments[k]):null;
+  const inst=mkt.instruments;
+  document.getElementById('asof').textContent=
+    'markets as of '+new Date(mkt.generated_at).toLocaleString()+' · macro series as published by source';
+  const root=document.getElementById('content'); root.innerHTML='';
+
+  // recession bands from USREC
+  const rec=F('USREC'), bands=[];
+  if(rec){ let a=null;
+    for(let i=0;i<rec.values.length;i++){
+      if(rec.values[i]===1&&a===null)a=rec.dates[i];
+      if(rec.values[i]===0&&a!==null){bands.push([a,rec.dates[i]]);a=null;}
+    } if(a!==null)bands.push([a,rec.dates[rec.dates.length-1]]);
+  }
+
+  // ---- regime hero ----
+  const cy=an.cycle, li=an.liquidity, po=an.policy, re=an.recession;
+  const hero=document.createElement('div'); hero.className='regime-hero';
+  hero.innerHTML=`<div><div class="lbl" style="font-size:12px;color:var(--ink2)">CYCLE REGIME</div>
+    <div class="big">${cy.quadrant}</div>
+    <div class="sub" style="margin-top:4px">Growth ${cy.growth.rising?'rising':'falling'} · core-inflation momentum ${cy.inflation.rising?'rising':'cooling'} · policy ${po.stance} · recession risk ${re.level}</div></div>
+    <div class="sub"><b>Favor:</b> ${cy.favor}<br><b>Avoid:</b> ${cy.avoid}</div>`;
+  root.appendChild(hero);
+
+  // ---- stat tiles ----
+  const tiles=document.createElement('div'); tiles.className='tiles';
+  const tile=(l,v,d,cls)=>`<div class="tile"><div class="lbl">${l}</div><div class="val">${v}</div>${d?`<div class="dlt ${cls||''}">${d}</div>`:''}</div>`;
+  tiles.innerHTML=
+    tile('Fed Funds', po.ffr.toFixed(2)+'%', 'Taylor-rule est. '+po.taylor_rule+'%')+
+    tile('US 10Y', fmtN(fred.series.DGS10.values.at(-1),2)+'%', 'real '+po.real_10y+'% · BE '+po.breakeven_10y+'%')+
+    tile('Curve 10y–3m', (re.t10y3m>0?'+':'')+re.t10y3m.toFixed(2), '10y–2y '+(re.t10y2y>0?'+':'')+re.t10y2y.toFixed(2))+
+    tile('HY spread', re.hy_oas.toFixed(2)+'%', 'IG '+fmtN(fred.series.BAMLC0A0CM.values.at(-1),2)+'%')+
+    tile('Net USD liquidity', '$'+fmtN(li.net_liq_bn,0)+'bn', (li.net_liq_chg_13w_bn>0?'+':'')+fmtN(li.net_liq_chg_13w_bn,0)+'bn / 13w', li.net_liq_chg_13w_bn>0?'up':'down')+
+    tile('Recession risk', re.level, re.points+' of 9 pts · Sahm '+re.sahm.toFixed(2));
+  root.appendChild(tiles);
+
+  // ---- conclusions ----
+  const h2c=document.createElement('h2'); h2c.innerHTML='Desk conclusions <span class="note">rule-based, generated from the data below</span>'; root.appendChild(h2c);
+  const cl=document.createElement('div'); cl.className='concl';
+  cl.innerHTML=an.conclusions.map(c=>`<div class="c-item ${c.sev}"><div class="c-title">${c.title}</div><div class="c-detail">${c.detail}</div></div>`).join('');
+  root.appendChild(cl);
+
+  // ---- allocation ----
+  const h2a=document.createElement('h2'); h2a.textContent='Asset-allocation tilts'; root.appendChild(h2a);
+  const alWrap=document.createElement('div'); alWrap.className='grid2'; root.appendChild(alWrap);
+  const alc=document.createElement('div'); alc.className='card'; alWrap.appendChild(alc);
+  alc.innerHTML='<div style="overflow-x:auto"><table><tr><th>Asset class</th><th style="text-align:left">Tilt</th><th style="text-align:left">Basis</th></tr>'+
+    an.allocation.map(a=>`<tr><td>${a.asset}</td><td style="text-align:left;font-weight:600;color:${a.tilt==='Overweight'?'var(--up)':a.tilt==='Underweight'?'var(--down)':'var(--ink2)'}">${a.tilt}</td><td style="text-align:left;color:var(--ink2)">${a.why}</td></tr>`).join('')+'</table></div>';
+
+  // ---- Policy & liquidity ----
+  const h2l=document.createElement('h2'); h2l.innerHTML='Policy &amp; liquidity <span class="note">Fed balance sheet − RRP − TGA = net liquidity; direction leads risk assets</span>'; root.appendChild(h2l);
+  const gl=document.createElement('div'); gl.className='grid2'; root.appendChild(gl);
+  lineChart(gl,{title:'Net USD liquidity',sub:'$bn — Fed B/S minus reverse repo minus Treasury General Account (weekly)',
+    series:[{label:'Net liquidity',data:{dates:li.dates.map(parseD),values:li.values}}], yfmt:v=>'$'+fmtN(v,0)});
+  lineChart(gl,{title:'Fed funds vs 2-year yield',sub:'2Y above funds rate = market pricing tightening; below = easing',
+    series:[{label:'Fed funds',data:since(F('DFF'),'2018-01-01')},{label:'US 2Y',data:since(F('DGS2'),'2018-01-01')}],yfmt:v=>fmtN(v,2)+'%'});
+  const gl3=document.createElement('div'); gl3.className='grid3'; root.appendChild(gl3);
+  lineChart(gl3,{title:'Fed balance sheet',sub:'$tn',height:160,series:[{label:'WALCL',data:scale(F('WALCL'),1e-6)}],yfmt:v=>'$'+fmtN(v,1)+'tn'});
+  lineChart(gl3,{title:'Overnight reverse repo',sub:'$bn — the buffer is drained',height:160,series:[{label:'RRP',data:since(F('RRPONTSYD'),'2020-01-01')}],yfmt:v=>'$'+fmtN(v,0)});
+  lineChart(gl3,{title:'M2 money supply, YoY',sub:'%',height:160,series:[{label:'M2 YoY',data:yoy(F('M2SL'))}],zero:0,yfmt:v=>fmtN(v,1)+'%'});
+
+  // ---- Growth & inflation ----
+  const h2g=document.createElement('h2'); h2g.innerHTML='US growth &amp; inflation <span class="note">the two axes of the investment clock</span>'; root.appendChild(h2g);
+  const gg=document.createElement('div'); gg.className='grid2'; root.appendChild(gg);
+  lineChart(gg,{title:'Inflation',sub:'YoY % — reference line = 2% target',hline:2,hlineLabel:'2% target',
+    series:[{label:'CPI',data:since(yoy(F('CPIAUCSL')),'2015-01-01')},{label:'Core CPI',data:since(yoy(F('CPILFESL')),'2015-01-01')},{label:'Core PCE',data:since(yoy(F('PCEPILFE')),'2015-01-01')}],yfmt:v=>fmtN(v,1)+'%'});
+  lineChart(gg,{title:'Growth momentum',sub:'payrolls 3m annualized vs industrial production YoY',zero:0,
+    series:[{label:'Payrolls 3m ann.',data:since(ann3m(F('PAYEMS')),'2015-01-01')},{label:'Ind. production YoY',data:since(yoy(F('INDPRO')),'2015-01-01')}],yfmt:v=>fmtN(v,1)+'%'});
+  const gg3=document.createElement('div'); gg3.className='grid3'; root.appendChild(gg3);
+  lineChart(gg3,{title:'Weekly Economic Index (NY Fed)',sub:'scaled to GDP growth',height:160,series:[{label:'WEI',data:since(F('WEI'),'2021-01-01')}],zero:0,yfmt:v=>fmtN(v,1)});
+  lineChart(gg3,{title:'Jobless claims, 4-wk avg',sub:'thousands',height:160,series:[{label:'Claims',data:scale(roll(since(F('ICSA'),'2022-01-01'),4),1e-3)}],yfmt:v=>fmtN(v,0)+'k'});
+  lineChart(gg3,{title:'Sahm rule',sub:'recession signal ≥ 0.50',height:160,hline:0.5,hlineLabel:'trigger',series:[{label:'Sahm',data:since(F('SAHMREALTIME'),'2005-01-01')}],bands,yfmt:v=>fmtN(v,2)});
+  lineChart(gg3,{title:'Consumer sentiment (U. Michigan)',height:160,series:[{label:'UMCSENT',data:since(F('UMCSENT'),'2015-01-01')}],yfmt:v=>fmtN(v,0)});
+  lineChart(gg3,{title:'Housing starts vs permits',sub:'thousands, SAAR',height:160,series:[{label:'Starts',data:since(F('HOUST'),'2015-01-01')},{label:'Permits',data:since(F('PERMIT'),'2015-01-01')}],yfmt:v=>fmtN(v,0)});
+  lineChart(gg3,{title:'Retail sales, YoY',height:160,series:[{label:'Retail YoY',data:since(yoy(F('RSAFS')),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%'});
+
+  // ---- Rates & credit ----
+  const h2r=document.createElement('h2'); h2r.innerHTML='Rates &amp; credit'; root.appendChild(h2r);
+  const gr=document.createElement('div'); gr.className='grid2'; root.appendChild(gr);
+  // yield curve snapshot
+  (function(){
+    const mats=[['DGS3MO',0.25,'3M'],['DGS2',2,'2Y'],['DGS5',5,'5Y'],['DGS10',10,'10Y'],['DGS30',30,'30Y']];
+    const snap=off=>mats.map(([k])=>{const s=F(k);return s.values[s.values.length-1-off];});
+    const now=snap(0),m3=snap(63),y1=snap(252);
+    const card=document.createElement('div');card.className='card';gr.appendChild(card);
+    card.innerHTML=`<h3>US Treasury curve</h3><div class="sub">today vs 3 months and 1 year ago</div>
+    <div class="legend"><span class="key"><span class="sw" style="background:${SC()[0]}"></span>Today</span>
+    <span class="key"><span class="sw" style="background:${SC()[1]}"></span>3m ago</span>
+    <span class="key"><span class="sw" style="background:${SC()[2]}"></span>1y ago</span></div>`;
+    const W=Math.max(320,card.clientWidth-32)||520,H=210,PL=40,PR=14,PT=10,PB=26;
+    const all=[...now,...m3,...y1]; let v0=Math.min(...all)-0.15,v1=Math.max(...all)+0.15;
+    const xi=i=>PL+i/(mats.length-1)*(W-PL-PR), Y=v=>PT+(v1-v)/(v1-v0)*(H-PT-PB);
+    let g='';
+    for(const tv of niceTicks(v0,v1,4)) g+=`<line x1="${PL}" x2="${W-PR}" y1="${Y(tv)}" y2="${Y(tv)}" stroke="var(--grid)"/>`+
+      `<text x="${PL-6}" y="${Y(tv)+4}" text-anchor="end" font-size="10.5" fill="var(--muted)">${tv.toFixed(1)}%</text>`;
+    mats.forEach(([,,l],i)=>g+=`<text x="${xi(i)}" y="${H-8}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${l}</text>`);
+    [[now,0],[m3,1],[y1,2]].forEach(([vals,ci])=>{
+      let p=''; vals.forEach((v,i)=>p+=(i?'L':'M')+xi(i)+' '+Y(v));
+      g+=`<path d="${p}" fill="none" stroke="${SC()[ci]}" stroke-width="2" stroke-linejoin="round"/>`;
+      vals.forEach((v,i)=>g+=`<circle cx="${xi(i)}" cy="${Y(v)}" r="4" fill="${SC()[ci]}" stroke="var(--surface)" stroke-width="2"/>`);
+    });
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.style.height=H+'px';svg.innerHTML=g;card.appendChild(svg);
+  })();
+  lineChart(gr,{title:'Curve spreads',sub:'10y–2y and 10y–3m, with recessions shaded — re-steepening after inversion is the danger window',zero:0,
+    series:[{label:'10y–2y',data:since(F('T10Y2Y'),'2000-01-01')},{label:'10y–3m',data:since(F('T10Y3M'),'2000-01-01')}],bands,yfmt:v=>fmtN(v,1)});
+  lineChart(gr,{title:'Real yield & inflation expectations',sub:'10Y TIPS real yield, 10Y breakeven, 5y5y forward',
+    series:[{label:'10Y real',data:since(F('DFII10'),'2018-01-01')},{label:'10Y breakeven',data:since(F('T10YIE'),'2018-01-01')},{label:'5y5y fwd',data:since(F('T5YIFR'),'2018-01-01')}],zero:0,yfmt:v=>fmtN(v,2)+'%'});
+  lineChart(gr,{title:'Credit spreads',sub:'ICE BofA option-adjusted spreads — the cleanest stress gauge',
+    series:[{label:'High yield',data:F('BAMLH0A0HYM2')},{label:'Investment grade',data:F('BAMLC0A0CM')}],yfmt:v=>fmtN(v,2)+'%'});
+  const gr3=document.createElement('div'); gr3.className='grid3'; root.appendChild(gr3);
+  lineChart(gr3,{title:'Financial conditions (NFCI)',sub:'>0 = tight',height:160,series:[{label:'NFCI',data:since(F('NFCI'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,2)});
+  lineChart(gr3,{title:'Financial stress (St. Louis Fed)',sub:'>0 = above-normal stress',height:160,series:[{label:'STLFSI',data:since(F('STLFSI4'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,2)});
+  lineChart(gr3,{title:'Global 10Y yields',sub:'monthly, OECD',height:160,series:[{label:'Germany',data:since(F('IRLTLT01DEM156N'),'2015-01-01')},{label:'Japan',data:since(F('IRLTLT01JPM156N'),'2015-01-01')},{label:'UK',data:since(F('IRLTLT01GBM156N'),'2015-01-01')}].concat(F('INDIRLTLT01STM')?[{label:'India',data:since(F('INDIRLTLT01STM'),'2015-01-01')}]:[]),yfmt:v=>fmtN(v,1)+'%'});
+
+  // ---- Global markets ----
+  const h2m=document.createElement('h2'); h2m.innerHTML='Global markets, FX &amp; commodities'; root.appendChild(h2m);
+  const gm=document.createElement('div'); gm.className='grid2'; root.appendChild(gm);
+  marketTable(gm,'Equity indices',inst,Object.keys(inst).filter(k=>inst[k].group==='equity'));
+  marketTable(gm,'FX, commodities & crypto',inst,Object.keys(inst).filter(k=>['fx','commodity'].includes(inst[k].group)));
+
+  const h2x=document.createElement('h2'); h2x.innerHTML='Cross-asset regime signals <span class="note">ratios; rising line = numerator winning</span>'; root.appendChild(h2x);
+  const gx=document.createElement('div'); gx.className='grid3'; root.appendChild(gx);
+  const meta={copper_gold:['Copper / Gold','global growth vs safety — tracks bond yields'],
+    rsp_spy:['Equal-weight / SPY','breadth: rising = rally broadening'],
+    eem_spy:['EM / US equities','dollar cycle & EM allocation'],
+    nifty_spx:['Nifty / S&P 500','India country allocation'],
+    gold_spx:['Gold / S&P 500','hard assets vs financial assets'],
+    hyg_tlt:['High-yield / Treasuries','credit risk appetite']};
+  for(const [k,[t,sub]] of Object.entries(meta)){
+    const sig=an.cross_asset[k]; if(!sig) continue;
+    lineChart(gx,{title:t,sub:sub+' · 3m '+(sig.chg3m>0?'+':'')+sig.chg3m+'%',height:160,
+      series:[{label:t,data:{dates:sig.dates.map(parseD),values:sig.values}}],yfmt:v=>fmtN(v,v<0.1?4:3)});
+  }
+
+  // ---- Sectors & themes ----
+  const mkRRG=(title,sub,rows,bench)=>{
+    const h=document.createElement('h2'); h.innerHTML=title+` <span class="note">${sub}</span>`; root.appendChild(h);
+    const g=document.createElement('div'); g.className='grid2'; root.appendChild(g);
+    rrgScatter(g,rows,'Rotation map (RRG)','vs '+bench+' — clockwise rotation: Improving → Leading → Weakening → Lagging');
+    rrgTable(g,rows,bench);
+  };
+  mkRRG('US sector rotation','SPDR sectors vs S&P 500',an.rrg.us_sectors,'S&P 500');
+  mkRRG('India sector rotation','NSE sector indices vs Nifty 50',an.rrg.in_sectors,'Nifty 50');
+  mkRRG('Global themes & industries','theme ETFs vs S&P 500 — semis, defense, uranium, data centers, copper…',an.rrg.themes,'S&P 500');
+}
+main().catch(e=>{
+  document.getElementById('content').innerHTML=
+    `<div class="err">Failed to load data: ${e.message}. If opening locally, serve over HTTP (python -m http.server) — browsers block fetch() from file://.</div>`;
+});
+</script>
+</body>
+</html>
