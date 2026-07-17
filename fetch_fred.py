@@ -68,8 +68,8 @@ SERIES = {
     "IRLTLT01JPM156N": ("Japan 10Y", "m", None),
     "IRLTLT01GBM156N": ("UK 10Y", "m", None),
     "INDIRLTLT01STM": ("India 10Y", "m", None),
-    # --- India / EM macro (OECD via FRED) ---
-    "INDCPIALLMINMEI": ("India CPI (index)", "m", None),
+    # (India CPI dropped: OECD-via-FRED series died 2025-03; live India CPI
+    #  now comes from the Investing.com calendar feed, see fetch_investing.py)
 }
 
 

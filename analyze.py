@@ -78,9 +78,19 @@ EXPECTED_AGE = {
 }
 
 
-def build_freshness(fred, mkt):
+def build_freshness(fred, mkt, inv=None):
     today = dt.datetime.now(dt.timezone.utc).date()
     rows = []
+    if inv:
+        for key, s in inv["series"].items():
+            last_obs = dt.date.fromisoformat(s["dates"][-1])
+            age = (today - last_obs).days
+            exp = s.get("cadence_days", 60)
+            status = "current" if age <= exp else "late" if age <= 2 * exp else "stale"
+            rows.append({"id": key, "label": s["label"], "source": "Investing.com",
+                         "last_obs": s["dates"][-1], "age_days": age,
+                         "expected_days": exp, "status": status,
+                         "late_by_days": max(0, age - exp)})
     for sid, s in fred["series"].items():
         last_obs = dt.date.fromisoformat(s["dates"][-1])
         age = (today - last_obs).days
@@ -121,8 +131,12 @@ def build_freshness(fred, mkt):
 def main():
     fred = json.loads((DATA / "fred.json").read_text(encoding="utf-8"))
     mkt = json.loads((DATA / "markets.json").read_text(encoding="utf-8"))
+    inv = None
+    if (DATA / "investing.json").exists():
+        inv = json.loads((DATA / "investing.json").read_text(encoding="utf-8"))
     F = lambda k: load_series(fred, k)
     P = lambda k: load_price(mkt, k)
+    IV = lambda k: (inv["series"][k]["values"][-1] if inv and k in inv["series"] else None)
     out = {"generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
     concl = []   # (severity: info|watch|action, title, detail)
 
@@ -353,6 +367,27 @@ def main():
     if ns:
         concl.append(("info", f"India vs US: Nifty/SPX {ns['chg3m']:+.1f}% (3m), {ns['chg6m']:+.1f}% (6m)",
             "Relative-strength trend for country allocation."))
+    ism_m, ism_s = IV("US_ISM_MFG"), IV("US_ISM_SVC")
+    if ism_m is not None:
+        concl.append(("info",
+            f"US ISM: manufacturing {ism_m:.1f}, services {ism_s:.1f} — "
+            f"{'both expanding' if ism_m > 50 and ism_s > 50 else 'manufacturing contracting' if ism_m < 50 else 'mixed'}",
+            "PMI above 50 = expansion. Manufacturing back above 50 alongside the copper/gold "
+            "impulse confirms the goods-cycle upturn."))
+    in_cpi, in_wpi, in_gdp, in_iip = IV("IN_CPI_YOY"), IV("IN_WPI_YOY"), IV("IN_GDP_YOY"), IV("IN_IIP_YOY")
+    if in_cpi is not None:
+        wedge = ""
+        if in_wpi is not None and in_wpi - in_cpi > 3:
+            wedge = (f" WPI at {in_wpi:.1f}% is running {in_wpi - in_cpi:.1f}pp above CPI — a wholesale-price "
+                     "surge that either squeezes corporate margins or passes through to CPI later; "
+                     "watch pricing-power sectors.")
+        concl.append(("watch" if (in_wpi or 0) - in_cpi > 3 else "info",
+            f"India macro: GDP {in_gdp:.1f}% YoY, CPI {in_cpi:.2f}%, IIP {in_iip:.1f}%",
+            f"CPI inside RBI's 2-6% band; growth strong.{wedge}"))
+    if inv:
+        out["india_macro"] = {k: {"label": s["label"], "last": s["values"][-1],
+                                  "last_release": s["dates"][-1]}
+                              for k, s in inv["series"].items()}
     for name, rows in (("US sector", out["rrg"]["us_sectors"]),
                        ("India sector", out["rrg"]["in_sectors"]),
                        ("Theme", out["rrg"]["themes"])):
@@ -386,7 +421,7 @@ def main():
          "why": f"DXY 3m {mkt['instruments']['DX-Y.NYB']['stats']['chg3m']:+.1f}%"},
     ]
     # data freshness audit — surfaced on the dashboard, stale data is disclosed
-    out["freshness"] = build_freshness(fred, mkt)
+    out["freshness"] = build_freshness(fred, mkt, inv)
     fs = out["freshness"]["summary"]
     if fs["stale"] or fs["late"]:
         worst = [r for r in out["freshness"]["rows"] if r["status"] != "current"][:4]

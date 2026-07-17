@@ -47,6 +47,10 @@ h2 .note{font-weight:400;color:var(--muted);font-size:12.5px;margin-left:8px}
 .card .sub{font-size:12px;color:var(--muted);margin-bottom:4px}
 .card .tbtn{position:absolute;top:12px;right:12px;font-size:11px;color:var(--muted);background:none;border:1px solid var(--grid);border-radius:6px;padding:2px 8px;cursor:pointer}
 .card .tbtn:hover{color:var(--ink)}
+.card .ibtn{right:66px;color:var(--s1);border-color:var(--s1)}
+.card .ibtn:hover{color:var(--s1);filter:brightness(1.15)}
+.srcline a{color:var(--s1);text-decoration:none}
+.srcline a:hover{text-decoration:underline}
 .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--ink2);margin:4px 0 2px}
 .legend .key{display:inline-flex;align-items:center;gap:5px}
 .legend .sw{width:14px;height:3px;border-radius:2px;display:inline-block}
@@ -78,6 +82,34 @@ td.up{color:var(--up)} td.down{color:var(--down)}
 footer{margin-top:40px;color:var(--muted);font-size:12px;border-top:1px solid var(--grid);padding-top:14px}
 footer a{color:var(--ink2)}
 .err{background:var(--surface);border:1px solid var(--down);border-radius:10px;padding:14px;margin:20px 0;color:var(--down)}
+/* --- live ticker bar --- */
+#livebar{display:none;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:7px 12px;margin:8px 0;font-size:12.5px}
+#livebar .mkt-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+#livebar .mkt-dot.open{background:var(--up);animation:pulse 2s infinite}
+#livebar .mkt-dot.closed{background:var(--muted)}
+@keyframes pulse{50%{opacity:.35}}
+#livebar .q{display:inline-flex;gap:6px;align-items:baseline;padding:2px 9px;border:1px solid var(--grid);border-radius:8px;white-space:nowrap}
+#livebar .q .ql{color:var(--ink2)} #livebar .q b{font-variant-numeric:tabular-nums;font-weight:600}
+#livebar .q .qc{font-size:11.5px;font-variant-numeric:tabular-nums}
+#livebar .q .qc.up{color:var(--up)} #livebar .q .qc.down{color:var(--down)}
+#livebar .lts{color:var(--muted);font-size:11.5px;margin-left:auto}
+/* --- modal --- */
+#modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:100;overflow:auto;padding:4vh 12px}
+#modal-card{background:var(--page);border:1px solid var(--border);border-radius:14px;max-width:880px;margin:0 auto;padding:20px 22px;position:relative;box-shadow:0 14px 50px rgba(0,0,0,.35)}
+#modal-x{position:absolute;top:10px;right:14px;background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+#modal-x:hover{color:var(--ink)}
+.m-sec{margin-top:14px}
+.m-sec h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:5px}
+.m-sec p{font-size:13.5px;color:var(--ink2)}
+.rank{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:9px;border:1px solid var(--border);min-width:64px;text-align:center}
+.rank.positive{color:var(--up)} .rank.negative{color:var(--down)} .rank.neutral{color:var(--muted)}
+.srcline{font-size:12px;color:var(--muted);margin-top:14px;border-top:1px solid var(--grid);padding-top:9px}
+.const-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.const-list span{font-size:12px;border:1px solid var(--grid);border-radius:8px;padding:2px 9px;color:var(--ink2)}
+.card h3.hasinfo{cursor:pointer}
+.card h3.hasinfo:hover{text-decoration:underline;text-decoration-color:var(--muted)}
+.card h3.hasinfo::after{content:' ⤢';color:var(--muted);font-size:11px;font-weight:400}
+tr.clickable{cursor:pointer} tr.clickable:hover td{background:rgba(128,128,128,.06)}
 </style>
 </head>
 <body>
@@ -86,6 +118,7 @@ footer a{color:var(--ink2)}
     <h1>Global Macro Monitor</h1>
     <span class="asof" id="asof">loading…</span>
   </header>
+  <div id="livebar"></div>
   <div id="content">Loading data…</div>
   <footer>
     Sources: Federal Reserve / FRED (St. Louis Fed), NY Fed (WEI), BLS, BEA, Census, ICE BofA (credit spreads via FRED),
@@ -139,13 +172,115 @@ const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov',
 function fmtDate(t){ const d=new Date(t); return MONTHS[d.getUTCMonth()]+" '"+String(d.getUTCFullYear()).slice(2); }
 function fmtDateFull(t){ const d=new Date(t); return d.getUTCDate()+' '+MONTHS[d.getUTCMonth()]+' '+d.getUTCFullYear(); }
 
+// ---- modal ----
+function openModal(){
+  let ov=document.getElementById('modal-ov');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='modal-ov';
+    ov.innerHTML='<div id="modal-card"><button id="modal-x" aria-label="close">×</button><div id="modal-body"></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',e=>{ if(e.target===ov) ov.style.display='none'; });
+    ov.querySelector('#modal-x').addEventListener('click',()=>ov.style.display='none');
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape') ov.style.display='none'; });
+  }
+  const body=ov.querySelector('#modal-body'); body.innerHTML=''; ov.style.display='block'; ov.scrollTop=0;
+  return body;
+}
+const SRC_LINKS=[
+  ['FRED','https://fred.stlouisfed.org'],
+  ['Investing.com','https://in.investing.com/economic-calendar'],
+  ['Yahoo','https://finance.yahoo.com'],
+  ['NSE','https://www.nseindia.com/market-data/live-market-indices'],
+  ['ICE BofA','https://fred.stlouisfed.org/categories/32297'],
+  ['OECD','https://data.oecd.org'],
+];
+function metaBlock(meta, updated){
+  let h='';
+  if(meta.d) h+=`<div class="m-sec"><h4>What this shows</h4><p>${meta.d}</p></div>`;
+  if(meta.th && meta.th.length){
+    h+=`<div class="m-sec"><h4>How to read it — key levels</h4><div style="overflow-x:auto"><table>
+    <tr><th style="text-align:left">Condition</th><th style="text-align:left">Read</th><th style="text-align:left">Implication</th></tr>`;
+    for(const [cond,rank,txt] of meta.th)
+      h+=`<tr><td style="text-align:left">${cond}</td><td style="text-align:left"><span class="rank ${rank}">${rank.toUpperCase()}</span></td><td style="text-align:left;color:var(--ink2)">${txt}</td></tr>`;
+    h+='</table></div></div>';
+  }
+  const links=SRC_LINKS.filter(([k])=>meta.src&&meta.src.includes(k))
+    .map(([k,u])=>`<a href="${u}" target="_blank" rel="noopener">${k} ↗</a>`).join(' · ');
+  h+=`<div class="srcline"><b>Source:</b> ${meta.src||'—'}${links?' · '+links:''}<br>
+      <b>Last data point:</b> ${updated||'—'} · <b>Refresh cycle:</b> pipeline every 6h; page re-fetches every 10 min; live strip 60s during market hours</div>`;
+  return h;
+}
+
+// ---- entity knowledge base (tap any sector/theme/index name) ----
+const INFO={
+// US SPDR sectors
+'Technology':{d:'S&P 500 information-technology sector (XLK). Mega-cap software, hardware and semis; the market\'s longest-duration equity exposure — most sensitive to real yields and the AI capex cycle.',c:['Microsoft','Apple','Nvidia','Broadcom','Oracle','Salesforce','AMD','Adobe','Qualcomm','Texas Instruments']},
+'Financials':{d:'S&P 500 financials (XLF). Banks, insurers, payment networks and capital-markets firms. Wins from a steeper yield curve, rising loan growth and light credit losses.',c:['Berkshire Hathaway','JPMorgan','Visa','Mastercard','Bank of America','Wells Fargo','Goldman Sachs','Morgan Stanley','S&P Global','American Express']},
+'Energy':{d:'S&P 500 energy (XLE). Integrated oil, E&P, refining and midstream. Tracks crude and natural-gas prices; a classic Overheat/Stagflation-regime hedge.',c:['ExxonMobil','Chevron','ConocoPhillips','Williams','EOG Resources','Schlumberger','Marathon Petroleum','Phillips 66','Kinder Morgan','ONEOK']},
+'Health Care':{d:'S&P 500 health care (XLV). Pharma, insurers, devices and life-science tools. Defensive earnings with policy-headline risk; often leads late-cycle.',c:['Eli Lilly','UnitedHealth','Johnson & Johnson','AbbVie','Merck','Thermo Fisher','Abbott','Amgen','Danaher','Pfizer']},
+'Industrials':{d:'S&P 500 industrials (XLI). Aerospace/defense, machinery, rails and electrical equipment. The purest read on the goods/capex cycle — moves with ISM manufacturing.',c:['GE Aerospace','Caterpillar','RTX','Uber','Honeywell','Union Pacific','Eaton','Boeing','Deere','Lockheed Martin']},
+'Consumer Discretionary':{d:'S&P 500 consumer discretionary (XLY). Retail, autos, restaurants, travel. Early-cycle leadership; hurt by high rates and a weakening consumer.',c:['Amazon','Tesla','Home Depot','McDonald\'s','Booking','Lowe\'s','TJX','Starbucks','Nike','Chipotle']},
+'Consumer Staples':{d:'S&P 500 staples (XLP). Food, beverages, household products, discount retail. Defensive, pricing-power businesses; leadership here usually signals risk-off rotation.',c:['Procter & Gamble','Costco','Walmart','Coca-Cola','PepsiCo','Philip Morris','Mondelez','Colgate','Target','Kimberly-Clark']},
+'Utilities':{d:'S&P 500 utilities (XLU). Regulated power and increasingly a data-center electricity-demand play. Bond proxy (rate-sensitive) plus the AI power-demand theme.',c:['NextEra','Southern','Duke','Constellation Energy','Sempra','AEP','Vistra','Dominion','PG&E','Exelon']},
+'Materials':{d:'S&P 500 materials (XLB). Industrial gases, chemicals, miners, construction aggregates. Commodity-cycle beta; watch copper and the dollar.',c:['Linde','Sherwin-Williams','Air Products','Ecolab','Freeport-McMoRan','Newmont','Corteva','Dow','DuPont','PPG']},
+'Real Estate':{d:'S&P 500 REITs (XLRE). Towers, logistics, data centers, healthcare properties. Rate-sensitive income; data-center REITs add an AI-infrastructure kicker.',c:['Prologis','American Tower','Equinix','Welltower','Simon Property','Public Storage','Realty Income','Crown Castle','Digital Realty','VICI']},
+'Communication Services':{d:'S&P 500 communication services (XLC). Mega-cap internet platforms plus media and telecom.',c:['Meta','Alphabet (GOOGL)','Alphabet (GOOG)','Netflix','T-Mobile','Disney','Comcast','Verizon','AT&T','Electronic Arts']},
+// India NSE sectors
+'Nifty IT':{d:'NSE IT services index. Export-driven (USD revenue) — benefits from a weaker rupee; demand tracks US/EU tech spending and deal cycles.',c:['TCS','Infosys','HCLTech','Wipro','Tech Mahindra','LTIMindtree','Persistent','Coforge','Mphasis','L&T Technology']},
+'Nifty Bank':{d:'India\'s 12 most liquid bank stocks. The economy\'s credit-growth proxy; driven by RBI policy, deposit competition and asset quality.',c:['HDFC Bank','ICICI Bank','SBI','Kotak Mahindra','Axis Bank','IndusInd','PNB','Bank of Baroda','Federal Bank','IDFC First']},
+'Nifty Pharma':{d:'Indian pharma — US generics exporters plus domestic formulations. Defensive with USD-revenue tailwind; watch US FDA actions and pricing.',c:['Sun Pharma','Cipla','Dr Reddy\'s','Divi\'s Labs','Lupin','Aurobindo','Zydus Life','Torrent Pharma','Alkem','Biocon']},
+'Nifty FMCG':{d:'Indian consumer staples. Rural + urban consumption proxy with strong pricing power; defensive in downturns, sensitive to food inflation and monsoon.',c:['HUL','ITC','Nestlé India','Britannia','Godrej Consumer','Dabur','Marico','Colgate India','Tata Consumer','United Spirits']},
+'Nifty Auto':{d:'Indian autos & ancillaries — 2-wheelers, PVs, CVs, EV transition plays. Tracks rural income, financing rates and commodity (steel/aluminium) costs.',c:['M&M','Maruti Suzuki','Tata Motors','Bajaj Auto','Eicher Motors','Hero MotoCorp','TVS Motor','Ashok Leyland','Bharat Forge','Bosch India']},
+'Nifty Metal':{d:'Indian ferrous & non-ferrous producers. Global commodity beta — driven by China demand, tariffs and the USD; leveraged balance sheets amplify moves.',c:['Tata Steel','Hindalco','JSW Steel','Vedanta','Jindal Steel','SAIL','NMDC','Hindustan Zinc','NALCO','APL Apollo']},
+'Nifty Energy':{d:'Indian energy complex — oil & gas plus power generation/transmission. Mix of regulated utilities and crude-linked refiners.',c:['Reliance','NTPC','Power Grid','ONGC','IOC','BPCL','GAIL','Tata Power','Adani Power','Coal India']},
+'Nifty Realty':{d:'Indian property developers. The most rate-sensitive Indian sector; runs on housing cycles, approvals and premium-launch traction.',c:['DLF','Macrotech (Lodha)','Godrej Properties','Oberoi Realty','Prestige Estates','Phoenix Mills','Brigade','Sobha','Anant Raj','Raymond Realty']},
+'Nifty Infra':{d:'Indian infrastructure — construction, capital goods, utilities, telecom towers, cement. The govt-capex and private-capex cycle proxy.',c:['Reliance','L&T','Bharti Airtel','UltraTech','NTPC','Power Grid','Adani Ports','Siemens India','ABB India','GMR Airports']},
+'Nifty PSE':{d:'Public-sector enterprises (ex-banks): defense, power, oil PSUs. The \'PSU re-rating\' theme — order books, dividends, government policy.',c:['NTPC','Power Grid','ONGC','Coal India','Bharat Electronics','HAL','IOC','GAIL','BPCL','Power Finance Corp']},
+'Nifty PSU Bank':{d:'State-owned banks. Highest beta to Indian rate/credit cycle and government recapitalization policy; re-rated hard on clean balance sheets.',c:['SBI','PNB','Bank of Baroda','Canara Bank','Union Bank','Indian Bank','Bank of India','Central Bank','UCO Bank','Bank of Maharashtra']},
+'Nifty Media':{d:'Indian media & entertainment. Small, volatile index — broadcasting, multiplexes, music and gaming.',c:['Zee Entertainment','Sun TV','PVR Inox','Network18','Saregama','Nazara Tech','Tips Music','Dish TV','Hathway']},
+// Theme ETFs
+'Semiconductors':{d:'VanEck Semiconductor ETF (SMH) — the AI-capex bellwether: GPU/accelerator designers, foundries and the equipment makers that build fabs. Leads the tech cycle both ways.',c:['Nvidia','TSMC','Broadcom','AMD','ASML','Texas Instruments','Qualcomm','Lam Research','Applied Materials','KLA','Micron','Intel']},
+'Biotech':{d:'SPDR S&P Biotech (XBI), equal-weighted small/mid-cap biotech. Long-duration risk asset — rallies on falling rates and M&A waves.',c:['Insmed','Exelixis','United Therapeutics','Alnylam','Vertex','Neurocrine','Halozyme','Ionis','Sarepta','Roivant']},
+'Aerospace & Defense':{d:'iShares US Aerospace & Defense (ITA). Defense-budget and rearmament theme plus commercial-aero recovery.',c:['GE Aerospace','RTX','Boeing','Lockheed Martin','Northrop Grumman','General Dynamics','TransDigm','Howmet','L3Harris','Axon']},
+'Homebuilders':{d:'SPDR Homebuilders (XHB). US housing cycle — builders plus building products/retail. Extremely mortgage-rate sensitive.',c:['DR Horton','Lennar','PulteGroup','NVR','Toll Brothers','Home Depot','Lowe\'s','Sherwin-Williams','Builders FirstSource','TopBuild']},
+'Regional Banks':{d:'SPDR Regional Banking (KRE). Mid-size US lenders — net-interest-margin play on curve steepness; the stress point in 2023\'s deposit runs.',c:['Truist','Regions','Huntington','Fifth Third','M&T Bank','KeyCorp','Citizens','Zions','Western Alliance','East West']},
+'Oil Services':{d:'VanEck Oil Services (OIH). Drillers and service providers — leveraged to upstream capex, which follows crude with a lag.',c:['SLB','Halliburton','Baker Hughes','Tenaris','Weatherford','NOV','ChampionX','Liberty Energy','Patterson-UTI','Helmerich & Payne']},
+'Solar':{d:'Invesco Solar (TAN). Global solar manufacturers, inverters and installers. Rate-sensitive growth + policy (IRA/China) driven.',c:['First Solar','Enphase','Nextracker','GCL Tech','Xinyi Solar','Sunrun','SolarEdge','Array Tech','Canadian Solar','Shoals']},
+'Uranium / Nuclear':{d:'Global X Uranium (URA). Miners + physical uranium + nuclear-tech. Rides the data-center/AI power-demand and energy-security supercycle.',c:['Cameco','Sprott Physical Uranium','NexGen','Kazatomprom','Uranium Energy Corp','Paladin','Denison','Oklo','Centrus','Deep Yellow']},
+'Copper Miners':{d:'Global X Copper Miners (COPX). Pure play on the electrification/grid/AI-datacenter copper deficit thesis. High beta to the copper price and China.',c:['Freeport-McMoRan','Ivanhoe Mines','Teck','Antofagasta','First Quantum','Southern Copper','KGHM','Lundin Mining','Sandfire','Capstone']},
+'Gold Miners':{d:'VanEck Gold Miners (GDX). Operating leverage on the gold price (~2-3x moves). Wins when real yields fall or central-bank buying persists.',c:['Newmont','Agnico Eagle','Barrick','Wheaton PM','Franco-Nevada','Gold Fields','Kinross','AngloGold','Royal Gold','Alamos']},
+'US Infrastructure':{d:'Global X US Infrastructure (PAVE). Onshoring/reshoring + grid buildout: aggregates, electrical equipment, steel, rail.',c:['Eaton','Trane','Parker Hannifin','Emerson','Nucor','Vulcan Materials','Martin Marietta','Quanta Services','CRH','Fastenal']},
+'Data Center REITs':{d:'Pacer Data & Infrastructure REIT (SRVR). Landlords of the AI buildout — data centers, towers, fiber. Rate-sensitive but demand-supercharged. Ties into the India data-center theme (tax incentives for hyperscalers → cables, cooling, power demand).',c:['Equinix','Digital Realty','American Tower','Crown Castle','Iron Mountain','SBA Communications','GDS Holdings','DigitalBridge']},
+'Software':{d:'iShares Expanded Tech-Software (IGV). Enterprise software & AI application layer.',c:['Microsoft','Oracle','Salesforce','Palantir','Adobe','ServiceNow','Intuit','Synopsys','Cadence','CrowdStrike']},
+'Innovation (ARKK)':{d:'ARK Innovation — highest-duration speculative growth basket. A pure risk-appetite / liquidity gauge; leads both melt-ups and drawdowns.',c:['Tesla','Coinbase','Roku','Roblox','Block','Robinhood','Palantir','CRISPR','Shopify','Draftkings']},
+// Major indices (market table)
+'S&P 500':{d:'500 largest US companies, cap-weighted — the world\'s benchmark risk asset (~$50tn).',c:[]},
+'Nasdaq Composite':{d:'All Nasdaq-listed stocks; tech/growth-heavy.',c:[]},
+'Nifty 50':{d:'India\'s benchmark: 50 largest NSE stocks, cap-weighted (free-float).',c:['HDFC Bank','Reliance','ICICI Bank','Infosys','Bharti Airtel','TCS','ITC','L&T','SBI','M&M']},
+'Nifty Bank':{d:'12 most liquid Indian banks (see Nifty Bank sector).',c:[]},
+'MSCI Emerging Mkts (EEM)':{d:'Emerging-market equities ETF: China, India, Taiwan, Korea, Brazil are the big weights. Inversely tied to the USD cycle.',c:[]},
+'Russell 2000':{d:'US small caps — domestic-cyclical, rate-sensitive, credit-sensitive. Breadth/risk-appetite tell.',c:[]},
+};
+
 // ---- line chart ----
 function lineChart(el, cfg){
   // cfg: {title, sub, series:[{label, data:{dates,values}}], yfmt, zero, hline, bands, height}
   const H = cfg.height||210, PL=46, PR=14, PT=10, PB=24;
   const card=document.createElement('div'); card.className='card'; el.appendChild(card);
-  card.innerHTML = `<h3>${cfg.title}</h3>` + (cfg.sub?`<div class="sub">${cfg.sub}</div>`:'') +
-    `<button class="tbtn">table</button>`;
+  const hasMeta = cfg.meta && !cfg._inModal;
+  card.innerHTML = `<h3${hasMeta?' class="hasinfo" title="tap for description, key levels & source"':''}>${cfg.title}</h3>` +
+    (cfg.sub?`<div class="sub">${cfg.sub}</div>`:'') + `<button class="tbtn">table</button>` +
+    (hasMeta?`<button class="tbtn ibtn" title="description, key levels, source & last update">ⓘ info</button>`:'');
+  if(hasMeta){
+    const openDetails=()=>{
+      const body=openModal();
+      lineChart(body,{...cfg,height:380,_inModal:true});
+      const updated=fmtDateFull(Math.max(...cfg.series.map(s=>s.data.dates[s.data.dates.length-1])));
+      const info=document.createElement('div'); info.innerHTML=metaBlock(cfg.meta,updated); body.appendChild(info);
+    };
+    card.querySelector('h3').addEventListener('click',openDetails);
+    card.querySelector('.ibtn').addEventListener('click',openDetails);
+  }
   if(cfg.series.length>1){
     const lg=document.createElement('div'); lg.className='legend';
     lg.innerHTML=cfg.series.map((s,i)=>`<span class="key"><span class="sw" style="background:${SC()[i]}"></span>${s.label}</span>`).join('');
@@ -242,11 +377,19 @@ function lineChart(el, cfg){
 }
 
 // ---- RRG scatter ----
-function rrgScatter(el, rows, title, sub){
+function rrgScatter(el, rows, title, sub, meta, _inModal){
   const card=document.createElement('div'); card.className='card'; el.appendChild(card);
-  card.innerHTML=`<h3>${title}</h3><div class="sub">${sub}</div>`;
+  card.innerHTML=`<h3${meta&&!_inModal?' class="hasinfo"':''}>${title}</h3><div class="sub">${sub}</div>`+
+    (meta&&!_inModal?`<button class="tbtn ibtn" style="right:12px">ⓘ info</button>`:'');
+  if(meta && !_inModal){
+    const open=()=>{ const body=openModal();
+      rrgScatter(body, rows, title, sub, meta, true);
+      const info=document.createElement('div'); info.innerHTML=metaBlock(meta, 'latest market close'); body.appendChild(info); };
+    card.querySelector('h3').addEventListener('click',open);
+    card.querySelector('.ibtn').addEventListener('click',open);
+  }
   const holder=document.createElement('div'); holder.style.position='relative'; card.appendChild(holder);
-  const W=Math.max(320,card.clientWidth-32)||480, H=330, PL=40,PR=14,PT=12,PB=30;
+  const W=Math.max(320,card.clientWidth-32)||480, H=_inModal?420:330, PL=40,PR=14,PT=12,PB=30;
   const xs=rows.map(r=>r.rs_ratio), ys=rows.map(r=>r.rs_mom);
   const padx=Math.max(1.2,(Math.max(...xs)-Math.min(...xs))*0.18), pady=Math.max(0.8,(Math.max(...ys)-Math.min(...ys))*0.18);
   const x0=Math.min(100-0.5,Math.min(...xs)-padx), x1=Math.max(100+0.5,Math.max(...xs)+padx);
@@ -281,23 +424,47 @@ function rrgScatter(el, rows, title, sub){
     tip.innerHTML=`<div class="tt-date">${r.label} — ${r.phase}</div>
       <div class="tt-row"><span>RS-Ratio</span><b>${r.rs_ratio}</b></div>
       <div class="tt-row"><span>RS-Mom</span><b>${r.rs_mom}</b></div>
-      <div class="tt-row"><span>Rel 3m</span><b>${r.rel3m==null?'–':r.rel3m+'%'}</b></div>`;
+      <div class="tt-row"><span>Rel 3m</span><b>${r.rel3m==null?'–':r.rel3m+'%'}</b></div>
+      ${INFO[r.label]?'<div class="tt-date" style="margin-top:3px">tap for constituents</div>':''}`;
     tip.style.display='block';
     tip.style.left=Math.min(e.clientX-rect.left+14, rect.width-160)+'px';
     tip.style.top=(e.clientY-rect.top-10)+'px';
   });
   svg.addEventListener('mouseleave',()=>tip.style.display='none');
+  svg.addEventListener('click',e=>{
+    const c=e.target.closest('circle[data-i]');
+    if(c){ const r=rows[+c.dataset.i];
+      entityModal(r.label, `${r.phase} · RS-Ratio ${r.rs_ratio} · RS-Mom ${r.rs_mom}`); }
+  });
+}
+
+function entityModal(label, extra){
+  const info=INFO[label]; if(!info) return;
+  const body=openModal();
+  let h=`<h3 style="font-size:18px;font-weight:650">${label}</h3>`;
+  if(extra) h+=`<div class="sub" style="margin-top:2px">${extra}</div>`;
+  h+=`<div class="m-sec"><h4>What it is</h4><p>${info.d}</p></div>`;
+  if(info.c && info.c.length)
+    h+=`<div class="m-sec"><h4>Representative constituents</h4><div class="const-list">`+
+       info.c.map(x=>`<span>${x}</span>`).join('')+`</div>
+       <p style="font-size:11.5px;color:var(--muted);margin-top:6px">Top holdings, indicative — verify current weights at the index/ETF issuer.</p></div>`;
+  body.innerHTML=h;
 }
 
 function rrgTable(el, rows, bench){
   const card=document.createElement('div'); card.className='card'; el.appendChild(card);
-  let h=`<h3>Relative performance vs ${bench}</h3><div class="sub">sorted by 3-month relative return</div>
+  let h=`<h3>Relative performance vs ${bench}</h3><div class="sub">sorted by 3-month relative return — tap a row for what's inside</div>
   <div style="overflow-x:auto"><table><tr><th>Name</th><th>Phase</th><th>Rel 1m</th><th>Rel 3m</th><th>Rel 6m</th><th>Abs 3m</th></tr>`;
   for(const r of rows){
-    h+=`<tr><td>${r.label}</td><td style="text-align:left"><span class="chip ${r.phase}">${r.phase}</span></td>`+
+    h+=`<tr${INFO[r.label]?` class="clickable" data-ent="${r.label.replace(/"/g,'&quot;')}"`:''}><td>${r.label}</td><td style="text-align:left"><span class="chip ${r.phase}">${r.phase}</span></td>`+
       pctCell(r.rel1m)+pctCell(r.rel3m)+pctCell(r.rel6m)+pctCell(r.abs3m)+'</tr>';
   }
   card.innerHTML=h+'</table></div>';
+  card.addEventListener('click',e=>{
+    const tr=e.target.closest('tr[data-ent]');
+    if(tr){ const r=rows.find(x=>x.label===tr.dataset.ent);
+      entityModal(tr.dataset.ent, r?`${r.phase} · rel 3m ${r.rel3m>0?'+':''}${r.rel3m}% vs ${bench}`:''); }
+  });
 }
 
 function marketTable(el, title, instruments, keys){
@@ -306,10 +473,14 @@ function marketTable(el, title, instruments, keys){
   <tr><th>Instrument</th><th>Last</th><th>1d</th><th>1m</th><th>3m</th><th>YTD</th><th>1y</th><th>vs 200dma</th><th>vs 52w-hi</th></tr>`;
   for(const k of keys){
     const m=instruments[k]; if(!m) continue; const s=m.stats;
-    h+=`<tr><td>${m.label}</td><td>${fmtN(s.last, s.last>1000?0:2)}</td>`+
+    h+=`<tr${INFO[m.label]?` class="clickable" data-ent="${m.label.replace(/"/g,'&quot;')}"`:''}><td>${m.label}</td><td>${fmtN(s.last, s.last>1000?0:2)}</td>`+
       pctCell(s.chg1d)+pctCell(s.chg1m)+pctCell(s.chg3m)+pctCell(s.chgytd)+pctCell(s.chg1y)+pctCell(s.vs200dma)+pctCell(s.from52wHigh)+'</tr>';
   }
   card.innerHTML=h+'</table></div>';
+  card.addEventListener('click',e=>{
+    const tr=e.target.closest('tr[data-ent]');
+    if(tr) entityModal(tr.dataset.ent,'');
+  });
 }
 
 // ---- main ----
@@ -318,6 +489,12 @@ async function main(){
   const [fred,mkt,an]=await Promise.all(
     ['data/fred.json','data/markets.json','data/analysis.json'].map(u=>fetch(u+bust).then(r=>{
       if(!r.ok) throw new Error(u+' → HTTP '+r.status); return r.json();})));
+  const inv=await fetch('data/investing.json'+bust).then(r=>r.ok?r.json():null).catch(()=>null);
+  const IVS=k=>{const s=inv&&inv.series[k]; return s?{dates:s.dates.map(parseD),values:s.values}:null;};
+  const SRC={fred:'FRED / St. Louis Fed (official US & OECD data)',
+             inv:'Investing.com economic calendar (public endpoint); primary: MOSPI / RBI / ISM',
+             yah:'Exchange data via Yahoo Finance (quotes delayed ≤ ~20 min)',
+             nse:'NSE official (allIndices) + Yahoo Finance history'};
   const F=k=>fred.series[k]?S(fred.series[k]):null;
   const P=k=>mkt.instruments[k]?S(mkt.instruments[k]):null;
   const inst=mkt.instruments;
@@ -384,28 +561,72 @@ async function main(){
   const h2l=document.createElement('h2'); h2l.innerHTML='Policy &amp; liquidity <span class="note">Fed balance sheet − RRP − TGA = net liquidity; direction leads risk assets</span>'; root.appendChild(h2l);
   const gl=document.createElement('div'); gl.className='grid2'; root.appendChild(gl);
   lineChart(gl,{title:'Net USD liquidity',sub:'$bn — Fed B/S minus reverse repo minus Treasury General Account (weekly)',
-    series:[{label:'Net liquidity',data:{dates:li.dates.map(parseD),values:li.values}}], yfmt:v=>'$'+fmtN(v,0)});
+    series:[{label:'Net liquidity',data:{dates:li.dates.map(parseD),values:li.values}}], yfmt:v=>'$'+fmtN(v,0),
+    meta:{src:SRC.fred,d:'The dollars actually available to the financial system: the Fed\'s balance sheet minus cash parked back at the Fed (reverse repo) and the Treasury\'s checking account (TGA). Its 3-month direction has led risk assets by several weeks through the QE/QT era.',
+    th:[['Rising > +$100bn over 13 weeks','positive','Liquidity tailwind — supportive for equities, credit, crypto'],
+        ['Flat (±$100bn)','neutral','Liquidity neither helping nor hurting; other drivers dominate'],
+        ['Falling > −$100bn over 13 weeks','negative','Liquidity drain — risk assets fight the tide; watch for multiple compression'],
+        ['RRP near $0 (now)','neutral','The QT shock-absorber is gone — further B/S runoff now drains bank reserves directly, so liquidity accidents get likelier']]}});
   lineChart(gl,{title:'Fed funds vs 2-year yield',sub:'2Y above funds rate = market pricing tightening; below = easing',
-    series:[{label:'Fed funds',data:since(F('DFF'),'2018-01-01')},{label:'US 2Y',data:since(F('DGS2'),'2018-01-01')}],yfmt:v=>fmtN(v,2)+'%'});
+    series:[{label:'Fed funds',data:since(F('DFF'),'2018-01-01')},{label:'US 2Y',data:since(F('DGS2'),'2018-01-01')}],yfmt:v=>fmtN(v,2)+'%',
+    meta:{src:SRC.fred,d:'The 2-year yield is the market\'s forecast of the average policy rate over the next two years — it leads the Fed. The gap between the two is the cleanest read on what\'s priced.',
+    th:[['2Y > funds by 25bp+ (now)','negative','Market pricing rate HIKES — headwind for duration and long-multiple equities'],
+        ['2Y ≈ funds (±25bp)','neutral','Fed on hold is the priced path'],
+        ['2Y < funds by 25bp+','positive','Cuts priced — tailwind for bonds and rate-sensitives (unless it\'s recession-driven)']]}});
   const gl3=document.createElement('div'); gl3.className='grid3'; root.appendChild(gl3);
-  lineChart(gl3,{title:'Fed balance sheet',sub:'$tn',height:160,series:[{label:'WALCL',data:scale(F('WALCL'),1e-6)}],yfmt:v=>'$'+fmtN(v,1)+'tn'});
-  lineChart(gl3,{title:'Overnight reverse repo',sub:'$bn — the buffer is drained',height:160,series:[{label:'RRP',data:since(F('RRPONTSYD'),'2020-01-01')}],yfmt:v=>'$'+fmtN(v,0)});
-  lineChart(gl3,{title:'M2 money supply, YoY',sub:'%',height:160,series:[{label:'M2 YoY',data:yoy(F('M2SL'))}],zero:0,yfmt:v=>fmtN(v,1)+'%'});
+  lineChart(gl3,{title:'Fed balance sheet',sub:'$tn',height:160,series:[{label:'WALCL',data:scale(F('WALCL'),1e-6)}],yfmt:v=>'$'+fmtN(v,1)+'tn',
+    meta:{src:SRC.fred,d:'Total Fed assets. Rising = QE (buying bonds, injecting reserves); falling = QT (runoff).',
+    th:[['Rising','positive','Reserve injection — supportive for asset prices'],['Falling (QT)','negative','Reserve drain — tightens financial plumbing over time']]}});
+  lineChart(gl3,{title:'Overnight reverse repo',sub:'$bn — the buffer is drained',height:160,series:[{label:'RRP',data:since(F('RRPONTSYD'),'2020-01-01')}],yfmt:v=>'$'+fmtN(v,0),
+    meta:{src:SRC.fred,d:'Cash money-market funds park at the Fed overnight. It absorbed QT for two years; near zero, QT bites bank reserves directly.',
+    th:[['> $500bn','positive','Big buffer — QT is painless'],['$50-500bn','neutral','Buffer thinning'],['≈ $0 (now)','negative','No buffer left — funding-market stress (repo spikes) becomes possible; the Fed typically ends QT near this point']]}});
+  lineChart(gl3,{title:'M2 money supply, YoY',sub:'%',height:160,series:[{label:'M2 YoY',data:yoy(F('M2SL'))}],zero:0,yfmt:v=>fmtN(v,1)+'%',
+    meta:{src:SRC.fred,d:'Broad money growth. The 2020 +27% surge preceded the 2021-22 inflation; the 2022-23 contraction was the first since the 1930s.',
+    th:[['> 8%','negative','Inflationary fuel building'],['2-8%','neutral','Normal nominal-growth range'],['< 0%','negative','Monetary contraction — deflationary, historically rare and recessionary']]}});
 
   // ---- Growth & inflation ----
   const h2g=document.createElement('h2'); h2g.innerHTML='US growth &amp; inflation <span class="note">the two axes of the investment clock</span>'; root.appendChild(h2g);
   const gg=document.createElement('div'); gg.className='grid2'; root.appendChild(gg);
   lineChart(gg,{title:'Inflation',sub:'YoY % — reference line = 2% target',hline:2,hlineLabel:'2% target',
-    series:[{label:'CPI',data:since(yoy(F('CPIAUCSL')),'2015-01-01')},{label:'Core CPI',data:since(yoy(F('CPILFESL')),'2015-01-01')},{label:'Core PCE',data:since(yoy(F('PCEPILFE')),'2015-01-01')}],yfmt:v=>fmtN(v,1)+'%'});
+    series:[{label:'CPI',data:since(yoy(F('CPIAUCSL')),'2015-01-01')},{label:'Core CPI',data:since(yoy(F('CPILFESL')),'2015-01-01')},{label:'Core PCE',data:since(yoy(F('PCEPILFE')),'2015-01-01')}],yfmt:v=>fmtN(v,1)+'%',
+    meta:{src:SRC.fred+' (BLS, BEA)',d:'US consumer inflation. Core PCE is the Fed\'s target measure. The 3m-annualized momentum (in the analysis engine) turns before the YoY prints.',
+    th:[['Core PCE < 2%','positive','Below target — green light for easing; bullish duration'],
+        ['Core PCE 2-3%','neutral','Near target — policy driven by growth side'],
+        ['Core PCE > 3%','negative','Too hot — Fed forced hawkish; bad for bonds AND equities via multiples'],
+        ['Headline re-accelerating while core cools','neutral','Usually energy — central banks look through it unless it persists']]}});
   lineChart(gg,{title:'Growth momentum',sub:'payrolls 3m annualized vs industrial production YoY',zero:0,
-    series:[{label:'Payrolls 3m ann.',data:since(ann3m(F('PAYEMS')),'2015-01-01')},{label:'Ind. production YoY',data:since(yoy(F('INDPRO')),'2015-01-01')}],yfmt:v=>fmtN(v,1)+'%'});
+    series:[{label:'Payrolls 3m ann.',data:since(ann3m(F('PAYEMS')),'2015-01-01')},{label:'Ind. production YoY',data:since(yoy(F('INDPRO')),'2015-01-01')}],yfmt:v=>fmtN(v,1)+'%',
+    meta:{src:SRC.fred+' (BLS, Federal Reserve G.17)',d:'The two workhorse US growth gauges: hiring momentum and factory output.',
+    th:[['Both positive & rising','positive','Expansion broadening — cyclicals lead'],
+        ['Payrolls decelerating toward 0','negative','Labor cycle turning — precedes recessions by ~2-4 quarters'],
+        ['IP YoY < 0','negative','Goods recession — watch whether services follow']]}});
   const gg3=document.createElement('div'); gg3.className='grid3'; root.appendChild(gg3);
-  lineChart(gg3,{title:'Weekly Economic Index (NY Fed)',sub:'scaled to GDP growth',height:160,series:[{label:'WEI',data:since(F('WEI'),'2021-01-01')}],zero:0,yfmt:v=>fmtN(v,1)});
-  lineChart(gg3,{title:'Jobless claims, 4-wk avg',sub:'thousands',height:160,series:[{label:'Claims',data:scale(roll(since(F('ICSA'),'2022-01-01'),4),1e-3)}],yfmt:v=>fmtN(v,0)+'k'});
-  lineChart(gg3,{title:'Sahm rule',sub:'recession signal ≥ 0.50',height:160,hline:0.5,hlineLabel:'trigger',series:[{label:'Sahm',data:since(F('SAHMREALTIME'),'2005-01-01')}],bands,yfmt:v=>fmtN(v,2)});
-  lineChart(gg3,{title:'Consumer sentiment (U. Michigan)',height:160,series:[{label:'UMCSENT',data:since(F('UMCSENT'),'2015-01-01')}],yfmt:v=>fmtN(v,0)});
-  lineChart(gg3,{title:'Housing starts vs permits',sub:'thousands, SAAR',height:160,series:[{label:'Starts',data:since(F('HOUST'),'2015-01-01')},{label:'Permits',data:since(F('PERMIT'),'2015-01-01')}],yfmt:v=>fmtN(v,0)});
-  lineChart(gg3,{title:'Retail sales, YoY',height:160,series:[{label:'Retail YoY',data:since(yoy(F('RSAFS')),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%'});
+  if(IVS('US_ISM_MFG')) lineChart(gg3,{title:'ISM PMIs',sub:'50 = expansion/contraction line',height:160,hline:50,hlineLabel:'50',
+    series:[{label:'Manufacturing',data:since(IVS('US_ISM_MFG'),'2015-01-01')},{label:'Services',data:since(IVS('US_ISM_SVC'),'2015-01-01')}],yfmt:v=>fmtN(v,1),
+    meta:{src:SRC.inv,d:'The most-watched US business surveys (purchasing managers). Dated by release. Manufacturing leads the goods cycle; services is 70%+ of the economy.',
+    th:[['Both > 50 (now)','positive','Broad expansion — earnings upgrades typically follow'],
+        ['Mfg < 50, services > 50','neutral','Goods recession, services holding — the 2022-24 pattern'],
+        ['Both < 50','negative','Broad contraction — recession odds high'],['Mfg < 45','negative','Deep goods recession']]}});
+  lineChart(gg3,{title:'Weekly Economic Index (NY Fed)',sub:'scaled to GDP growth',height:160,series:[{label:'WEI',data:since(F('WEI'),'2021-01-01')}],zero:0,yfmt:v=>fmtN(v,1),
+    meta:{src:SRC.fred+' (NY Fed)',d:'Ten weekly activity series (steel, fuel, rail, retail, claims…) scaled so the reading ≈ real GDP growth. The highest-frequency official growth pulse available.',
+    th:[['> 2','positive','Trend-or-better growth in real time'],['0-2','neutral','Sub-trend expansion'],['< 0','negative','Real-time contraction — do not wait for the quarterly GDP print']]}});
+  lineChart(gg3,{title:'Jobless claims, 4-wk avg',sub:'thousands',height:160,series:[{label:'Claims',data:scale(roll(since(F('ICSA'),'2022-01-01'),4),1e-3)}],yfmt:v=>fmtN(v,0)+'k',
+    meta:{src:SRC.fred+' (Dept. of Labor, weekly)',d:'New unemployment filings — the fastest official labor signal, weekly with a 5-day lag.',
+    th:[['< 240k','positive','Layoffs quiescent'],['240-280k','neutral','Normalizing'],['> 300k and rising','negative','Labor cracking — historically the recession confirmation']]}});
+  lineChart(gg3,{title:'Sahm rule',sub:'recession signal ≥ 0.50',height:160,hline:0.5,hlineLabel:'trigger',series:[{label:'Sahm',data:since(F('SAHMREALTIME'),'2005-01-01')}],bands,yfmt:v=>fmtN(v,2),
+    meta:{src:SRC.fred,d:'Rise of the 3-month-average unemployment rate above its 12-month low. Every reading ≥ 0.50 since 1970 has coincided with recession (one 2024 false-ish alarm).',
+    th:[['< 0.30','positive','Labor market stable'],['0.30-0.49','neutral','Deterioration underway — watch monthly'],['≥ 0.50','negative','Historic recession trigger — de-risk cyclical exposure']]}});
+  lineChart(gg3,{title:'Consumer sentiment (U. Michigan)',height:160,series:[{label:'UMCSENT',data:since(F('UMCSENT'),'2015-01-01')}],yfmt:v=>fmtN(v,0),
+    meta:{src:SRC.fred+' (U. Michigan; FRED posts with ~1mo license lag)',d:'Household mood — driven lately by inflation and politics more than jobs. Extremes are contrarian.',
+    th:[['> 90','neutral','Confident consumer — cycle mature'],['60-90','neutral','Middling'],['< 60 (now)','neutral','Depressed — historically a contrarian BUY zone for equities 12m out, but check what\'s depressing it (here: prices)']]}});
+  lineChart(gg3,{title:'Housing starts vs permits',sub:'thousands, SAAR',height:160,series:[{label:'Starts',data:since(F('HOUST'),'2015-01-01')},{label:'Permits',data:since(F('PERMIT'),'2015-01-01')}],yfmt:v=>fmtN(v,0),
+    meta:{src:SRC.fred+' (Census)',d:'Housing is THE interest-rate transmission channel — permits lead starts lead completions lead employment. First sector down in tightening, first up in easing.',
+    th:[['Permits rising','positive','Rate relief reaching the real economy — early-cycle signal'],
+        ['Permits < starts, both falling','negative','Pipeline emptying — construction jobs at risk 2 quarters out'],
+        ['Starts < 1.2M SAAR','negative','Deep housing recession territory (demographic demand ≈ 1.5M+)']]}});
+  lineChart(gg3,{title:'Retail sales, YoY',height:160,series:[{label:'Retail YoY',data:since(yoy(F('RSAFS')),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%',
+    meta:{src:SRC.fred+' (Census, nominal)',d:'Nominal consumer spending on goods. Subtract inflation mentally: 3% nominal with 3% CPI = flat real spending.',
+    th:[['YoY > CPI','positive','Real spending growing'],['YoY ≈ CPI','neutral','Flat real'],['YoY < 0','negative','Nominal decline — rare outside recessions']]}});
 
   // ---- Rates & credit ----
   const h2r=document.createElement('h2'); h2r.innerHTML='Rates &amp; credit'; root.appendChild(h2r);
@@ -416,35 +637,96 @@ async function main(){
     const snap=off=>mats.map(([k])=>{const s=F(k);return s.values[s.values.length-1-off];});
     const now=snap(0),m3=snap(63),y1=snap(252);
     const card=document.createElement('div');card.className='card';gr.appendChild(card);
-    card.innerHTML=`<h3>US Treasury curve</h3><div class="sub">today vs 3 months and 1 year ago</div>
+    card.innerHTML=`<h3 class="hasinfo">US Treasury curve</h3><div class="sub">today vs 3 months and 1 year ago</div>
+    <button class="tbtn ibtn" style="right:12px">ⓘ info</button>
     <div class="legend"><span class="key"><span class="sw" style="background:${SC()[0]}"></span>Today</span>
     <span class="key"><span class="sw" style="background:${SC()[1]}"></span>3m ago</span>
     <span class="key"><span class="sw" style="background:${SC()[2]}"></span>1y ago</span></div>`;
-    const W=Math.max(320,card.clientWidth-32)||520,H=210,PL=40,PR=14,PT=10,PB=26;
-    const all=[...now,...m3,...y1]; let v0=Math.min(...all)-0.15,v1=Math.max(...all)+0.15;
-    const xi=i=>PL+i/(mats.length-1)*(W-PL-PR), Y=v=>PT+(v1-v)/(v1-v0)*(H-PT-PB);
-    let g='';
-    for(const tv of niceTicks(v0,v1,4)) g+=`<line x1="${PL}" x2="${W-PR}" y1="${Y(tv)}" y2="${Y(tv)}" stroke="var(--grid)"/>`+
-      `<text x="${PL-6}" y="${Y(tv)+4}" text-anchor="end" font-size="10.5" fill="var(--muted)">${tv.toFixed(1)}%</text>`;
-    mats.forEach(([,,l],i)=>g+=`<text x="${xi(i)}" y="${H-8}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${l}</text>`);
-    [[now,0],[m3,1],[y1,2]].forEach(([vals,ci])=>{
-      let p=''; vals.forEach((v,i)=>p+=(i?'L':'M')+xi(i)+' '+Y(v));
-      g+=`<path d="${p}" fill="none" stroke="${SC()[ci]}" stroke-width="2" stroke-linejoin="round"/>`;
-      vals.forEach((v,i)=>g+=`<circle cx="${xi(i)}" cy="${Y(v)}" r="4" fill="${SC()[ci]}" stroke="var(--surface)" stroke-width="2"/>`);
-    });
-    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.style.height=H+'px';svg.innerHTML=g;card.appendChild(svg);
+    const curveMeta={src:SRC.fred+' (US Treasury H.15 par yields)',
+      d:'The whole Treasury curve in one snapshot, with its own recent history. The SHAPE is the message: the short end is Fed policy, the long end is growth + inflation + term-premium expectations.',
+      th:[['Upward-sloping, parallel shifts','positive','Normal regime — carry works, banks earn the spread'],
+          ['Short end falling vs 3m ago','positive','Easing being priced in'],
+          ['Long end rising while short end anchored (bear-steepener)','negative','Term premium/deficit worry — pressures equity valuations and mortgages'],
+          ['Curve humped or inverted anywhere','negative','Transition regime — see the curve-spreads chart']]};
+    const openCurve=()=>{const body=openModal();
+      body.innerHTML=`<h3 style="font-size:18px;font-weight:650">US Treasury curve</h3>`;
+      const holder=document.createElement('div'); body.appendChild(holder); renderCurve(holder,380);
+      const info=document.createElement('div');
+      info.innerHTML=metaBlock(curveMeta, fmtDateFull(F('DGS10').dates[F('DGS10').dates.length-1]));
+      body.appendChild(info);};
+    card.querySelector('h3').addEventListener('click',openCurve);
+    card.querySelector('.ibtn').addEventListener('click',openCurve);
+    function renderCurve(container,H){
+      const W=Math.max(320,(container.clientWidth||card.clientWidth-32))||520,PL=40,PR=14,PT=10,PB=26;
+      const all=[...now,...m3,...y1]; let v0=Math.min(...all)-0.15,v1=Math.max(...all)+0.15;
+      const xi=i=>PL+i/(mats.length-1)*(W-PL-PR), Y=v=>PT+(v1-v)/(v1-v0)*(H-PT-PB);
+      let g='';
+      for(const tv of niceTicks(v0,v1,4)) g+=`<line x1="${PL}" x2="${W-PR}" y1="${Y(tv)}" y2="${Y(tv)}" stroke="var(--grid)"/>`+
+        `<text x="${PL-6}" y="${Y(tv)+4}" text-anchor="end" font-size="10.5" fill="var(--muted)">${tv.toFixed(1)}%</text>`;
+      mats.forEach(([,,l],i)=>g+=`<text x="${xi(i)}" y="${H-8}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${l}</text>`);
+      [[now,0],[m3,1],[y1,2]].forEach(([vals,ci])=>{
+        let p=''; vals.forEach((v,i)=>p+=(i?'L':'M')+xi(i)+' '+Y(v));
+        g+=`<path d="${p}" fill="none" stroke="${SC()[ci]}" stroke-width="2" stroke-linejoin="round"/>`;
+        vals.forEach((v,i)=>g+=`<circle cx="${xi(i)}" cy="${Y(v)}" r="4" fill="${SC()[ci]}" stroke="var(--surface)" stroke-width="2"/>`);
+      });
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.style.height=H+'px';svg.innerHTML=g;container.appendChild(svg);
+    }
+    renderCurve(card,210);
   })();
   lineChart(gr,{title:'Curve spreads',sub:'10y–2y and 10y–3m, with recessions shaded — re-steepening after inversion is the danger window',zero:0,
-    series:[{label:'10y–2y',data:since(F('T10Y2Y'),'2000-01-01')},{label:'10y–3m',data:since(F('T10Y3M'),'2000-01-01')}],bands,yfmt:v=>fmtN(v,1)});
+    series:[{label:'10y–2y',data:since(F('T10Y2Y'),'2000-01-01')},{label:'10y–3m',data:since(F('T10Y3M'),'2000-01-01')}],bands,yfmt:v=>fmtN(v,1),
+    meta:{src:SRC.fred,d:'The yield curve\'s recession record: inversion (below 0) has preceded every US recession since 1970 by 6-18 months. Crucially, recessions historically START during the re-steepening back through zero, not during the inversion.',
+    th:[['Steep and positive (+50bp+)','positive','Normal expansion curve — banks profitable, credit flows'],
+        ['Inverted (< 0)','negative','Recession warning armed, clock running'],
+        ['Re-steepening after inversion (now)','negative','The historically dangerous window — the 1990, 2001, 2008 recessions all began here. Offset: this cycle\'s steepening is hike-repricing, not cut-panic'],
+        ['Bear-steepening (long end selling off)','neutral','Term premium/supply story — pressures equity multiples']]}});
   lineChart(gr,{title:'Real yield & inflation expectations',sub:'10Y TIPS real yield, 10Y breakeven, 5y5y forward',
-    series:[{label:'10Y real',data:since(F('DFII10'),'2018-01-01')},{label:'10Y breakeven',data:since(F('T10YIE'),'2018-01-01')},{label:'5y5y fwd',data:since(F('T5YIFR'),'2018-01-01')}],zero:0,yfmt:v=>fmtN(v,2)+'%'});
+    series:[{label:'10Y real',data:since(F('DFII10'),'2018-01-01')},{label:'10Y breakeven',data:since(F('T10YIE'),'2018-01-01')},{label:'5y5y fwd',data:since(F('T5YIFR'),'2018-01-01')}],zero:0,yfmt:v=>fmtN(v,2)+'%',
+    meta:{src:SRC.fred,d:'Decomposes the 10Y: the real (TIPS) yield is the true cost of capital; the breakeven is priced inflation. 5y5y forward is the market\'s verdict on Fed credibility.',
+    th:[['Real yield > 2%','negative','Expensive capital — pressures growth stocks, gold, housing (gold has defied this via central-bank buying)'],
+        ['Real yield 0-2%','neutral','Normal range'],['Real yield < 0','positive','Free money — asset-price rocket fuel'],
+        ['5y5y > 2.6%','negative','Expectations de-anchoring — the Fed\'s nightmare, forces structural hawkishness'],
+        ['5y5y ≈ 2-2.4% (now)','positive','Credibility intact despite everything']]}});
   lineChart(gr,{title:'Credit spreads',sub:'ICE BofA option-adjusted spreads — the cleanest stress gauge',
-    series:[{label:'High yield',data:F('BAMLH0A0HYM2')},{label:'Investment grade',data:F('BAMLC0A0CM')}],yfmt:v=>fmtN(v,2)+'%'});
+    series:[{label:'High yield',data:F('BAMLH0A0HYM2')},{label:'Investment grade',data:F('BAMLC0A0CM')}],yfmt:v=>fmtN(v,2)+'%',
+    meta:{src:SRC.fred+' (ICE BofA)',d:'Extra yield over Treasuries demanded for corporate default risk. Credit sniffs out trouble before equities.',
+    th:[['HY < 3% (now)','negative','Priced for perfection — zero cushion; poor forward returns for credit, and complacency risk for equities'],
+        ['HY 3-4.5%','neutral','Fair compensation'],
+        ['HY > 5% and widening fast','negative','Stress — usually accompanies equity drawdowns; watch weekly pace'],
+        ['HY > 8%','positive','Panic pricing — historically a generational entry into credit']]}});
   const gr3=document.createElement('div'); gr3.className='grid3'; root.appendChild(gr3);
-  lineChart(gr3,{title:'Financial conditions (NFCI)',sub:'>0 = tight',height:160,series:[{label:'NFCI',data:since(F('NFCI'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,2)});
-  lineChart(gr3,{title:'Financial stress (St. Louis Fed)',sub:'>0 = above-normal stress',height:160,series:[{label:'STLFSI',data:since(F('STLFSI4'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,2)});
-  lineChart(gr3,{title:'Global 10Y yields',sub:'monthly, OECD',height:160,series:[{label:'Germany',data:since(F('IRLTLT01DEM156N'),'2015-01-01')},{label:'Japan',data:since(F('IRLTLT01JPM156N'),'2015-01-01')},{label:'UK',data:since(F('IRLTLT01GBM156N'),'2015-01-01')}].concat(F('INDIRLTLT01STM')?[{label:'India',data:since(F('INDIRLTLT01STM'),'2015-01-01')}]:[]),yfmt:v=>fmtN(v,1)+'%'});
+  lineChart(gr3,{title:'Financial conditions (NFCI)',sub:'>0 = tight',height:160,series:[{label:'NFCI',data:since(F('NFCI'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,2),
+    meta:{src:SRC.fred+' (Chicago Fed, 105 indicators)',d:'Composite of money-market, debt, equity and leverage conditions. Zero = average since 1971.',
+    th:[['< −0.3 (now)','positive','Loose conditions — markets doing the Fed\'s easing for it'],['−0.3 to +0.3','neutral','Normal'],['> +0.3','negative','Genuinely tight — credit contraction risk']]}});
+  lineChart(gr3,{title:'Financial stress (St. Louis Fed)',sub:'>0 = above-normal stress',height:160,series:[{label:'STLFSI',data:since(F('STLFSI4'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,2),
+    meta:{src:SRC.fred,d:'18-indicator weekly stress index (yields, spreads, vol).',
+    th:[['< 0 (now)','positive','Calm'],['0 to 1','negative','Stress building — check funding markets'],['> 1','negative','Crisis-level (2008 hit ~5, Mar-2020 ~3)']]}});
+  lineChart(gr3,{title:'Global 10Y yields',sub:'monthly, OECD',height:160,series:[{label:'Germany',data:since(F('IRLTLT01DEM156N'),'2015-01-01')},{label:'Japan',data:since(F('IRLTLT01JPM156N'),'2015-01-01')},{label:'UK',data:since(F('IRLTLT01GBM156N'),'2015-01-01')}].concat(F('INDIRLTLT01STM')?[{label:'India',data:since(F('INDIRLTLT01STM'),'2015-01-01')}]:[]),yfmt:v=>fmtN(v,1)+'%',
+    meta:{src:SRC.fred+' (OECD — published with 1-2 month lag)',d:'Global sovereign benchmarks. JGB yields matter most: Japan is the world\'s largest creditor, and rising home yields pull Japanese capital out of US/EU bonds (the carry-trade unwind channel).',
+    th:[['JGB 10Y > 2% (now ~2.7%)','negative','Historic regime change — structural upward pressure on ALL global long yields'],
+        ['Bund-Treasury gap widening','neutral','Dollar-direction input'],
+        ['India 10Y ~7% with CPI ~4.4%','positive','~2.6% real yield — attractive carry if INR stable']]}});
+
+  // ---- India macro (live via Investing.com) ----
+  if(inv){
+    const h2in=document.createElement('h2'); h2in.innerHTML='India macro <span class="note">live from the economic calendar — dated by release</span>'; root.appendChild(h2in);
+    const gin=document.createElement('div'); gin.className='grid3'; root.appendChild(gin);
+    lineChart(gin,{title:'India CPI vs WPI, YoY',sub:'RBI band: 2-6% — note the WPI-CPI wedge',height:180,hline:6,hlineLabel:'RBI upper band',
+      series:[{label:'CPI',data:since(IVS('IN_CPI_YOY'),'2015-01-01')},{label:'WPI',data:since(IVS('IN_WPI_YOY'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%',
+      meta:{src:SRC.inv,d:'India consumer vs wholesale inflation. WPI is commodity-heavy and leads CPI pass-through; a wide WPI-CPI wedge means either margin squeeze or future CPI, and complicates RBI easing.',
+      th:[['CPI 2-6%, mid-band (now 4.4%)','positive','Inside RBI\'s tolerance — policy flexibility intact'],
+          ['CPI > 6%','negative','Above band — RBI forced hawkish; negative for rate-sensitives (banks NIMs mixed, realty hit)'],
+          ['CPI < 2%','neutral','Below band — deflation concern, aggressive easing likely'],
+          ['WPI − CPI > 3pp (now ~5.5pp)','negative','Wholesale surge not yet in CPI — margin pressure for manufacturers OR pass-through coming; favor pricing-power names']]}});
+    lineChart(gin,{title:'India GDP, YoY',sub:'quarterly',height:180,series:[{label:'GDP YoY',data:since(IVS('IN_GDP_YOY'),'2013-01-01')}],yfmt:v=>fmtN(v,1)+'%',
+      meta:{src:SRC.inv,d:'India real GDP growth, quarterly releases. The structural story (demographics, capex, formalization) needs 6.5%+ to absorb labor-force growth.',
+      th:[['> 7.5% (now 7.8%)','positive','Above-potential growth — earnings upgrades, supports premium valuations'],
+          ['6-7.5%','neutral','At potential'],['< 6%','negative','Below potential — multiple de-rating risk for the Nifty\'s premium']]}});
+    lineChart(gin,{title:'India Industrial Production, YoY',height:180,series:[{label:'IIP YoY',data:since(IVS('IN_IIP_YOY'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%',
+      meta:{src:SRC.inv,d:'Factory output — mining, manufacturing, electricity. The monthly pulse of India\'s capex/manufacturing cycle.',
+      th:[['> 6%','positive','Industrial boom — capital goods, infra lead'],['2-6% (now 5.1%)','neutral','Steady expansion'],['< 2%','negative','Industrial stall — watch capex-linked sectors']]}});
+  }
 
   // ---- Global markets ----
   const h2m=document.createElement('h2'); h2m.innerHTML='Global markets, FX &amp; commodities'; root.appendChild(h2m);
@@ -454,23 +736,42 @@ async function main(){
 
   const h2x=document.createElement('h2'); h2x.innerHTML='Cross-asset regime signals <span class="note">ratios; rising line = numerator winning</span>'; root.appendChild(h2x);
   const gx=document.createElement('div'); gx.className='grid3'; root.appendChild(gx);
-  const meta={copper_gold:['Copper / Gold','global growth vs safety — tracks bond yields'],
-    rsp_spy:['Equal-weight / SPY','breadth: rising = rally broadening'],
-    eem_spy:['EM / US equities','dollar cycle & EM allocation'],
-    nifty_spx:['Nifty / S&P 500','India country allocation'],
-    gold_spx:['Gold / S&P 500','hard assets vs financial assets'],
-    hyg_tlt:['High-yield / Treasuries','credit risk appetite']};
-  for(const [k,[t,sub]] of Object.entries(meta)){
+  const xmeta={
+    copper_gold:['Copper / Gold','global growth vs safety — tracks bond yields',
+      {src:SRC.yah,d:'Dr. Copper (industrial demand) over gold (fear/liquidity hedge). One of the best real-time global-growth gauges; strongly correlated with 10Y yields.',
+      th:[['Rising (now, +25% 3m)','positive','Growth impulse accelerating — cyclicals, EM, higher yields'],['Falling','negative','Defensive bid — growth fading or crisis hedging'],['Divergence vs bond yields','neutral','One of them is wrong — usually resolves toward copper/gold']]}],
+    rsp_spy:['Equal-weight / SPY','breadth: rising = rally broadening',
+      {src:SRC.yah,d:'Equal-weighted S&P vs cap-weighted: the cleanest mega-cap-concentration gauge.',
+      th:[['Rising','positive','Rally broadening — healthier, more durable advance'],['Flat (now)','neutral','Mega-caps still the market'],['Falling while SPX rises','negative','Narrow melt-up — fragile; historically precedes corrections']]}],
+    eem_spy:['EM / US equities','dollar cycle & EM allocation',
+      {src:SRC.yah,d:'Emerging vs US equities — effectively a USD-cycle trade (EM outperforms in dollar downcycles).',
+      th:[['Rising','positive','EM bid — usually weak USD + commodity strength; supports India allocation'],['Falling','negative','US exceptionalism regime persists']]}],
+    nifty_spx:['Nifty / S&P 500','India country allocation',
+      {src:SRC.yah,d:'India vs US equities in local terms. The 2022-24 India outperformance built the valuation premium; this ratio tests whether it holds.',
+      th:[['Rising','positive','India re-rating vs US — add on strength'],['Falling (now, −15% 6m)','negative','India lagging — premium compressing; wait for the ratio to base before re-overweighting']]}],
+    gold_spx:['Gold / S&P 500','hard assets vs financial assets',
+      {src:SRC.yah,d:'The supercycle gauge: hard assets vs paper claims. Multi-year uptrends here (1970s, 2000s) marked commodity supercycles and equity-multiple stagnation.',
+      th:[['Rising (secular)','negative','Hard-asset regime — inflationary, central-bank gold bid, equity multiples capped; overweight real assets'],['Falling (secular)','positive','Financial-asset regime — the 2011-2021 playbook']]}],
+    hyg_tlt:['High-yield / Treasuries','credit risk appetite',
+      {src:SRC.yah,d:'Junk bonds vs long Treasuries — pure risk-appetite within fixed income.',
+      th:[['Rising','positive','Credit risk-on'],['Falling fast','negative','Flight to safety — often leads equity drawdowns by days']]}]};
+  for(const [k,[t,sub,m]] of Object.entries(xmeta)){
     const sig=an.cross_asset[k]; if(!sig) continue;
     lineChart(gx,{title:t,sub:sub+' · 3m '+(sig.chg3m>0?'+':'')+sig.chg3m+'%',height:160,
-      series:[{label:t,data:{dates:sig.dates.map(parseD),values:sig.values}}],yfmt:v=>fmtN(v,v<0.1?4:3)});
+      series:[{label:t,data:{dates:sig.dates.map(parseD),values:sig.values}}],yfmt:v=>fmtN(v,v<0.1?4:3),meta:m});
   }
 
   // ---- Sectors & themes ----
   const mkRRG=(title,sub,rows,bench)=>{
     const h=document.createElement('h2'); h.innerHTML=title+` <span class="note">${sub}</span>`; root.appendChild(h);
     const g=document.createElement('div'); g.className='grid2'; root.appendChild(g);
-    rrgScatter(g,rows,'Rotation map (RRG)','vs '+bench+' — clockwise rotation: Improving → Leading → Weakening → Lagging');
+    rrgScatter(g,rows,'Rotation map (RRG)','vs '+bench+' — clockwise rotation: Improving → Leading → Weakening → Lagging',
+      {src:SRC.nse.includes('NSE')&&bench==='Nifty 50'?SRC.nse:SRC.yah,
+       d:`Relative-rotation view vs ${bench}. X-axis (RS-Ratio) = each group's relative-strength trend: price ratio vs its own 63-day average, ×100. Y-axis (RS-Momentum) = how fast that trend is changing (RS-Ratio vs its 21-day average). Groups rotate clockwise through the quadrants over a cycle — the classic playbook is to buy Improving→Leading and rotate out through Weakening.`,
+       th:[['Leading (top-right)','positive','Strong AND strengthening vs the benchmark — momentum allocation'],
+           ['Improving (top-left)','positive','Still behind but turning up — early-entry candidates, best risk/reward'],
+           ['Weakening (bottom-right)','neutral','Still ahead but fading — take profits, tighten stops'],
+           ['Lagging (bottom-left)','negative','Weak and weakening — avoid until it crosses into Improving']]});
     rrgTable(g,rows,bench);
   };
   mkRRG('US sector rotation','SPDR sectors vs S&P 500',an.rrg.us_sectors,'S&P 500');
@@ -503,6 +804,27 @@ main().catch(e=>{
 });
 // keep an open tab live: re-fetch and re-render every 10 minutes (silent on failure — keeps last good render)
 setInterval(()=>{ main().catch(()=>{}); }, 10*60*1000);
+
+// ---- live intraday strip: polls the `live` branch every 60s during market hours ----
+const LIVE_URL='https://raw.githubusercontent.com/Cruzojain26/macro-dashboard/live/live.json';
+async function pollLive(){
+  const bar=document.getElementById('livebar');
+  try{
+    const r=await fetch(LIVE_URL+'?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) throw 0;
+    const lv=await r.json();
+    const ageMin=(Date.now()-new Date(lv.ts))/6e4;
+    if(ageMin>45){ bar.style.display='none'; return; }   // feed gone quiet -> hide, don't mislead
+    const anyOpen=lv.nse_open||lv.us_open;
+    let h=`<span><span class="mkt-dot ${anyOpen?'open':'closed'}"></span><b style="font-size:11.5px">${
+      lv.nse_open&&lv.us_open?'NSE + US OPEN':lv.nse_open?'NSE OPEN':lv.us_open?'US OPEN':'MARKETS CLOSED'}</b></span>`;
+    for(const q of lv.quotes)
+      h+=`<span class="q"><span class="ql">${q.label}</span><b>${q.last.toLocaleString('en-US')}</b><span class="qc ${q.chg>0?'up':q.chg<0?'down':''}">${q.chg>0?'▲':q.chg<0?'▼':''}${Math.abs(q.chg).toFixed(2)}%</span></span>`;
+    h+=`<span class="lts">tick ${Math.round(ageMin)}m ago · NSE real-time, global ≤20m delayed</span>`;
+    bar.innerHTML=h; bar.style.display='flex';
+  }catch(e){ bar.style.display='none'; }
+}
+pollLive(); setInterval(pollLive, 60*1000);
 </script>
 </body>
 </html>
