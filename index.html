@@ -253,6 +253,29 @@ const INFO={
 'Data Center REITs':{d:'Pacer Data & Infrastructure REIT (SRVR). Landlords of the AI buildout — data centers, towers, fiber. Rate-sensitive but demand-supercharged. Ties into the India data-center theme (tax incentives for hyperscalers → cables, cooling, power demand).',c:['Equinix','Digital Realty','American Tower','Crown Castle','Iron Mountain','SBA Communications','GDS Holdings','DigitalBridge']},
 'Software':{d:'iShares Expanded Tech-Software (IGV). Enterprise software & AI application layer.',c:['Microsoft','Oracle','Salesforce','Palantir','Adobe','ServiceNow','Intuit','Synopsys','Cadence','CrowdStrike']},
 'Innovation (ARKK)':{d:'ARK Innovation — highest-duration speculative growth basket. A pure risk-appetite / liquidity gauge; leads both melt-ups and drawdowns.',c:['Tesla','Coinbase','Roku','Roblox','Block','Robinhood','Palantir','CRISPR','Shopify','Draftkings']},
+// MSCI countries (iShares country ETFs)
+'Japan':{d:'MSCI Japan (EWJ). Corporate-governance reform + reflation story; the yen is the swing factor — a strengthening JPY flips USD returns.',c:['Toyota','Sony','Mitsubishi UFJ','Hitachi','Keyence','Tokyo Electron','SoftBank','Nintendo']},
+'Germany':{d:'MSCI Germany (EWG). Industrials/exporters leveraged to global capex and China demand; fiscal-defense spending is the new impulse.',c:['SAP','Siemens','Allianz','Deutsche Telekom','Airbus*','Rheinmetall','Munich Re','Infineon']},
+'United Kingdom':{d:'MSCI UK (EWU). Value-heavy: energy majors, miners, banks, staples. A commodity + dividend play more than a UK-economy play.',c:['AstraZeneca','Shell','HSBC','Unilever','BP','Rio Tinto','GSK','Barclays']},
+'France':{d:'MSCI France (EWQ). Luxury (China-consumer proxy), aerospace, energy.',c:['LVMH','TotalEnergies','Schneider Electric','Airbus','Sanofi','Hermès','L\'Oréal','Safran']},
+'Italy':{d:'MSCI Italy (EWI). Banks + utilities + defense — a rates-and-fiscal beneficiary; one of Europe\'s cheapest markets.',c:['UniCredit','Intesa Sanpaolo','Ferrari','Enel','Leonardo','Eni','Generali']},
+'Spain':{d:'MSCI Spain (EWP). Banks with EM (LatAm) exposure, utilities, Inditex.',c:['Banco Santander','Iberdrola','Inditex (Zara)','BBVA','CaixaBank','Ferrovial']},
+'Netherlands':{d:'MSCI Netherlands (EWN). Effectively a semiconductor-equipment play (ASML) plus staples.',c:['ASML','Prosus','ING','Ahold Delhaize','Wolters Kluwer','ASM International']},
+'Switzerland':{d:'MSCI Switzerland (EWL). Defensive quality: pharma, food, financials. The classic risk-off equity market with a hard currency.',c:['Nestlé','Novartis','Roche','UBS','Zurich Insurance','ABB','Richemont']},
+'Sweden':{d:'MSCI Sweden (EWD). Industrials + banks; high global-capex beta.',c:['Atlas Copco','Investor AB','Volvo','Ericsson','SEB','Sandvik']},
+'Australia':{d:'MSCI Australia (EWA). Iron ore/China proxy + big banks. Commodity currency exposure.',c:['BHP','Commonwealth Bank','CSL','NAB','Westpac','Wesfarmers','Rio Tinto']},
+'Canada':{d:'MSCI Canada (EWC). Banks + energy + gold miners — a hard-asset-heavy DM market.',c:['RBC','Shopify','TD Bank','Enbridge','Brookfield','Canadian Natural','Barrick']},
+'South Korea':{d:'MSCI Korea (EWY). Semis + autos + batteries; the highest-beta DM-adjacent tech market. Governance ("Value-up") reform is the re-rating story.',c:['Samsung Electronics','SK Hynix','Hyundai','LG Energy','Celltrion','KB Financial']},
+'Taiwan':{d:'MSCI Taiwan (EWT). The AI supply chain in one country — TSMC is ~half the index. Geopolitical tail risk priced against monopoly economics.',c:['TSMC','Hon Hai (Foxconn)','MediaTek','Quanta','Delta Electronics']},
+'China':{d:'MSCI China (MCHI). Internet platforms + financials + EVs. Trades on stimulus hopes, regulation and geopolitics; deeply discounted vs history.',c:['Tencent','Alibaba','PDD','Meituan','BYD','Xiaomi','NetEase','ICBC']},
+'India (MSCI)':{d:'MSCI India (INDA) — the USD-denominated foreign-investor view of India (differs from Nifty via FX and weights). The premium-valuation growth story.',c:['HDFC Bank','Reliance','ICICI Bank','Infosys','Bharti Airtel','TCS','Axis Bank','M&M']},
+'Brazil':{d:'MSCI Brazil (EWZ). Commodities + banks with double-digit local rates — a rate-cut and commodity play. High political beta.',c:['Vale','Petrobras','Itaú','Nubank','B3','Ambev']},
+'Mexico':{d:'MSCI Mexico (EWW). Nearshoring beneficiary; consumer + financials + industrials. USMCA/tariff politics are the risk.',c:['América Móvil','Femsa','Banorte','Walmex','Grupo México']},
+'Indonesia':{d:'MSCI Indonesia (EIDO). Young demographics + nickel/EV-supply-chain resources; banks dominate the index.',c:['BCA','Bank Rakyat','Bank Mandiri','Telkom','Astra']},
+'Singapore':{d:'MSCI Singapore (EWS). Banks + real estate — an Asian financial-hub carry play with a strong currency.',c:['DBS','OCBC','UOB','Singtel','Sea Ltd*','CapitaLand']},
+'South Africa':{d:'MSCI South Africa (EZA). Gold/platinum miners + Naspers (Tencent proxy) + banks. Gold-price beta plus EM-reform story.',c:['Naspers','Gold Fields','Standard Bank','FirstRand','AngloGold','Sasol']},
+'Turkey':{d:'MSCI Turkey (TUR). High-inflation, high-rate orthodoxy-restoration trade. Extreme volatility.',c:['BIM','Koç Holding','Turkish Airlines','Akbank','İşbank']},
+'Poland':{d:'MSCI Poland (EPOL). EU-convergence + defense-spending frontline; banks dominate.',c:['PKO Bank','PZU','Orlen','Pekao','Allegro','Dino Polska']},
 // Major indices (market table)
 'S&P 500':{d:'500 largest US companies, cap-weighted — the world\'s benchmark risk asset (~$50tn).',c:[]},
 'Nasdaq Composite':{d:'All Nasdaq-listed stocks; tech/growth-heavy.',c:[]},
@@ -774,6 +797,8 @@ async function main(){
            ['Lagging (bottom-left)','negative','Weak and weakening — avoid until it crosses into Improving']]});
     rrgTable(g,rows,bench);
   };
+  if(an.rrg.countries&&an.rrg.countries.length)
+    mkRRG('Country rotation — MSCI indexes','iShares MSCI country ETFs vs MSCI ACWI — the country-allocation engine; tap a country for what drives it',an.rrg.countries,'MSCI ACWI');
   mkRRG('US sector rotation','SPDR sectors vs S&P 500',an.rrg.us_sectors,'S&P 500');
   mkRRG('India sector rotation','NSE sector indices vs Nifty 50',an.rrg.in_sectors,'Nifty 50');
   mkRRG('Global themes & industries','theme ETFs vs S&P 500 — semis, defense, uranium, data centers, copper…',an.rrg.themes,'S&P 500');

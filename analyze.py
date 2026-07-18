@@ -330,6 +330,7 @@ def main():
         "us_sectors": rrg("us_sector", "SPY"),
         "in_sectors": rrg("in_sector", "^NSEI"),
         "themes": rrg("theme", "SPY"),
+        "countries": rrg("country", "ACWI"),
     }
 
     # ---------------- Conclusions ----------------
@@ -388,6 +389,16 @@ def main():
         out["india_macro"] = {k: {"label": s["label"], "last": s["values"][-1],
                                   "last_release": s["dates"][-1]}
                               for k, s in inv["series"].items()}
+    ctry = out["rrg"]["countries"]
+    if ctry:
+        lead_c = [r["label"] for r in ctry if r["phase"] == "Leading"][:5]
+        imp_c = [r["label"] for r in ctry if r["phase"] == "Improving"][:4]
+        lag_c = [r["label"] for r in ctry if r["phase"] == "Lagging"][:4]
+        concl.append(("action",
+            f"Country allocation (vs MSCI ACWI): overweight {', '.join(lead_c) if lead_c else '—'}",
+            f"Improving (accumulate): {', '.join(imp_c) if imp_c else '—'}. "
+            f"Lagging (avoid/underweight): {', '.join(lag_c) if lag_c else '—'}. "
+            "Based on RRG position of iShares MSCI country ETFs vs ACWI."))
     for name, rows in (("US sector", out["rrg"]["us_sectors"]),
                        ("India sector", out["rrg"]["in_sectors"]),
                        ("Theme", out["rrg"]["themes"])):
