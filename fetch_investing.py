@@ -19,8 +19,9 @@ FOLDER = Path(__file__).resolve().parent
 OUT = FOLDER / "data" / "investing.json"
 
 URL = "https://sbcharts.investing.com/events_charts/us/{eid}.json"
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-           "Accept": "application/json"}
+# NOTE: keep headers minimal — adding Referer/Origin/full-browser UA triggers
+# Cloudflare 403s on this endpoint (verified 2026-07-20); the bare UA passes.
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 # event_id -> (key, label, unit, cadence_days: expected max age of last RELEASE)
 EVENTS = {
@@ -34,11 +35,17 @@ EVENTS = {
 
 
 def fetch_event(eid: int):
+    # Cloudflare TLS-fingerprints python-requests (403) but passes curl with the
+    # same headers (verified 2026-07-20) -> fetch via curl subprocess.
+    import subprocess
     for attempt in range(4):
         try:
-            r = requests.get(URL.format(eid=eid), headers=HEADERS, timeout=30)
-            r.raise_for_status()
-            payload = r.json()   # Cloudflare challenge pages fail json() -> retry
+            r = subprocess.run(
+                ["curl", "-s", "--max-time", "30",
+                 "-H", f"User-Agent: {HEADERS['User-Agent']}",
+                 URL.format(eid=eid)],
+                capture_output=True, text=True, timeout=45)
+            payload = json.loads(r.stdout)   # challenge pages fail json parse -> retry
             return payload["data"]
         except Exception:
             if attempt == 3:
@@ -47,6 +54,14 @@ def fetch_event(eid: int):
 
 
 def main():
+    # merge-protect: a Cloudflare-blocked run must NEVER wipe previously good
+    # series (an empty file broke the dashboard's India section on 2026-07-19).
+    prev = {}
+    if OUT.exists():
+        try:
+            prev = json.loads(OUT.read_text(encoding="utf-8")).get("series", {})
+        except Exception:
+            prev = {}
     out = {"generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
            "source": "Investing.com economic calendar (sbcharts public endpoint)",
            "series": {}}
@@ -57,6 +72,9 @@ def main():
         except Exception as e:
             print(f"  FAIL {key} (event {eid}): {type(e).__name__}: {e}")
             failed.append(key)
+            if key in prev:   # keep last good copy; freshness audit will age it honestly
+                out["series"][key] = prev[key]
+                print(f"       kept previous copy (last {prev[key]['dates'][-1]})")
             continue
         dates, values = [], []
         for ts, val, _ in data:

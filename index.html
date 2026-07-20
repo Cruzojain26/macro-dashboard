@@ -512,7 +512,8 @@ async function main(){
   const [fred,mkt,an]=await Promise.all(
     ['data/fred.json','data/markets.json','data/analysis.json'].map(u=>fetch(u+bust).then(r=>{
       if(!r.ok) throw new Error(u+' → HTTP '+r.status); return r.json();})));
-  const inv=await fetch('data/investing.json'+bust).then(r=>r.ok?r.json():null).catch(()=>null);
+  let inv=await fetch('data/investing.json'+bust).then(r=>r.ok?r.json():null).catch(()=>null);
+  if(inv && (!inv.series || !Object.keys(inv.series).length)) inv=null;   // empty fetch run — degrade gracefully
   const IVS=k=>{const s=inv&&inv.series[k]; return s?{dates:s.dates.map(parseD),values:s.values}:null;};
   const SRC={fred:'FRED / St. Louis Fed (official US & OECD data)',
              inv:'Investing.com economic calendar (public endpoint); primary: MOSPI / RBI / ISM',
@@ -732,21 +733,21 @@ async function main(){
         ['India 10Y ~7% with CPI ~4.4%','positive','~2.6% real yield — attractive carry if INR stable']]}});
 
   // ---- India macro (live via Investing.com) ----
-  if(inv){
+  if(inv && IVS('IN_CPI_YOY')){
     const h2in=document.createElement('h2'); h2in.innerHTML='India macro <span class="note">live from the economic calendar — dated by release</span>'; root.appendChild(h2in);
     const gin=document.createElement('div'); gin.className='grid3'; root.appendChild(gin);
-    lineChart(gin,{title:'India CPI vs WPI, YoY',sub:'RBI band: 2-6% — note the WPI-CPI wedge',height:180,hline:6,hlineLabel:'RBI upper band',
+    if(IVS('IN_WPI_YOY')) lineChart(gin,{title:'India CPI vs WPI, YoY',sub:'RBI band: 2-6% — note the WPI-CPI wedge',height:180,hline:6,hlineLabel:'RBI upper band',
       series:[{label:'CPI',data:since(IVS('IN_CPI_YOY'),'2015-01-01')},{label:'WPI',data:since(IVS('IN_WPI_YOY'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%',
       meta:{src:SRC.inv,d:'India consumer vs wholesale inflation. WPI is commodity-heavy and leads CPI pass-through; a wide WPI-CPI wedge means either margin squeeze or future CPI, and complicates RBI easing.',
       th:[['CPI 2-6%, mid-band (now 4.4%)','positive','Inside RBI\'s tolerance — policy flexibility intact'],
           ['CPI > 6%','negative','Above band — RBI forced hawkish; negative for rate-sensitives (banks NIMs mixed, realty hit)'],
           ['CPI < 2%','neutral','Below band — deflation concern, aggressive easing likely'],
           ['WPI − CPI > 3pp (now ~5.5pp)','negative','Wholesale surge not yet in CPI — margin pressure for manufacturers OR pass-through coming; favor pricing-power names']]}});
-    lineChart(gin,{title:'India GDP, YoY',sub:'quarterly',height:180,series:[{label:'GDP YoY',data:since(IVS('IN_GDP_YOY'),'2013-01-01')}],yfmt:v=>fmtN(v,1)+'%',
+    if(IVS('IN_GDP_YOY')) lineChart(gin,{title:'India GDP, YoY',sub:'quarterly',height:180,series:[{label:'GDP YoY',data:since(IVS('IN_GDP_YOY'),'2013-01-01')}],yfmt:v=>fmtN(v,1)+'%',
       meta:{src:SRC.inv,d:'India real GDP growth, quarterly releases. The structural story (demographics, capex, formalization) needs 6.5%+ to absorb labor-force growth.',
       th:[['> 7.5% (now 7.8%)','positive','Above-potential growth — earnings upgrades, supports premium valuations'],
           ['6-7.5%','neutral','At potential'],['< 6%','negative','Below potential — multiple de-rating risk for the Nifty\'s premium']]}});
-    lineChart(gin,{title:'India Industrial Production, YoY',height:180,series:[{label:'IIP YoY',data:since(IVS('IN_IIP_YOY'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%',
+    if(IVS('IN_IIP_YOY')) lineChart(gin,{title:'India Industrial Production, YoY',height:180,series:[{label:'IIP YoY',data:since(IVS('IN_IIP_YOY'),'2015-01-01')}],zero:0,yfmt:v=>fmtN(v,1)+'%',
       meta:{src:SRC.inv,d:'Factory output — mining, manufacturing, electricity. The monthly pulse of India\'s capex/manufacturing cycle.',
       th:[['> 6%','positive','Industrial boom — capital goods, infra lead'],['2-6% (now 5.1%)','neutral','Steady expansion'],['< 2%','negative','Industrial stall — watch capex-linked sectors']]}});
   }
